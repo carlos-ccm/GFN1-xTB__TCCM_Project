@@ -10,8 +10,9 @@ if __name__ == '__main__':
     st = time.time()
     
     #Input control (NOTE:We will not use mol2 files)
-    parser = argparse.ArgumentParser(description = 'Prediction of atomic logP using atomic fingerprint')
-    parser.add_argument('-i', required= True, help='train_input file')
+    parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
+    parser.add_argument('-i', required= True, help='molecule coordinates input')
+    parser.add_argument('-p', required=True, help='parameters of the elements')
 
     args = parser.parse_args()
     test = args.i
