@@ -17,10 +17,11 @@ For running this code you will only need the following packages installed:
 
 
 ```bash
+
 # Set up steps
 git clone https://github.com/carlos-ccm/xtb.git
 pip install numpy
-npm install
+
 ```
 
 
