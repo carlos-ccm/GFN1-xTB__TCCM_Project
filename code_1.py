@@ -5,14 +5,27 @@ import os
 import numpy as np
 import argparse
 import time
-import pandas
+
+def parameters_assigment(all_params):
+    z_dict = dict()
+    kf = 1.5
+    
+    return()
 
 
 def repulsion_energy(num_atoms):
-    for n in num_atoms:
-        repulsion_energy = 0
     
-    
+    #Initialization of the repulsion energy term
+    repulsion_energy = 0
+    for a in range(num_atoms):
+        for b in range(a+1, num_atoms):
+            dist_ab = 0
+            for i in range(3):
+                dist_ab += (coordinates[a,i]-coordinates[b,i])**2
+                
+            dist_ab = np.sqrt(dist_ab)
+            print("Distance between",element_list[a],"and",element_list[b],"is:",dist_ab)    
+            #repulsion_energy += (z_dict.get(element_list[a]) * z_dict.get(element_list[b])/dist_ab) * np.exp(-np.sqrt() * dist_ab ** kf) 
     
     return(repulsion_energy)
 
@@ -27,25 +40,36 @@ if __name__ == '__main__':
     args = parser.parse_args()
     molecule = args.i
     parameters = args.p
+    element_list = []
 
     # Files reading
     with open(parameters,'r') as file:
        all_params = file.read()
        
     with open(molecule,'r') as file:
-        file.readline()
+        num_atoms = int(file.readline().strip())
         molecule_name = file.readline().strip()
-
+        coordinates = np.zeros((num_atoms,3))
         
-    # The number of atoms is always the first line of a xyz file
-    num_atoms = int(np.loadtxt(molecule, max_rows = 1))
-    
-    # After the first 2 rows, then the coordinates of the system appear
-    coordinates = np.loadtxt(molecule,skiprows=2,usecols=(1,3))
-    
-    
-    print(num_atoms)
+        for n in range(num_atoms):
+           data = file.readline().strip()
+           element_list.append(data.split()[0])
+           
+           # After the first two lines, the atoms
+           for i in range(3):
+               coordinates[n][i] = data.split()[i+1]
+           
+    print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
+    for i in range(num_atoms):
+        print("Atom of the system:",element_list[i],"with coordinates:",coordinates[i,:])
+    
+    repulsion_energy(num_atoms)
+    
+    et = time.time()
+    
+    print("Execution time in seconds {:.2f}".format(et-st))
+        
     
 
     
