@@ -1,34 +1,44 @@
-# Project Title
+# Semiempirical GFN1-xTB Method code
 
-Brief description of your project goes here.
+Development of a coding project for the TCCM Master. The project consist of creating from scratch a code that performs semiempirical DFT calculations for a given molecule. 
+
+
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Features](#features)
-3. [Installation](#installation)
-4. [Usage](#usage)
-5. [Contributing](#contributing)
-6. [License](#license)
-
-## Introduction
-
-Provide a concise introduction to your project. Explain what it does, why it's useful, and any other relevant information. Include badges for build status, code quality, and other relevant metrics if applicable.
-
-## Features
-
-List the key features of your project. You can use bullet points for better readability.
-
-- Feature 1
-- Feature 2
-- Feature 3
+1. [Installation](#installation)
+2. [Inputs](#inputs)
+3. [Usage](#usage)
 
 ## Installation
 
-Provide step-by-step instructions on how to install your project. Include any prerequisites and dependencies that users need to have installed.
+For running this code you will only need the following packages installed:
+- Numpy
+
 
 ```bash
-# Example installation steps
-git clone https://github.com/your-username/your-project.git
-cd your-project
+# Set up steps
+git clone https://github.com/carlos-ccm/xtb.git
+pip install numpy
 npm install
+```
+
+
+## Inputs
+
+When running the code you will need to provide some inputs.
+- Molecule geometry (.xyz format)
+- File containing the parameters (parameters.dat)
+
+## Usage
+
+The code includes the following flags
+```python
+
+-help Description of the code
+-i <xyz file>
+-p <parameters.dat>
+```
+
+
+
