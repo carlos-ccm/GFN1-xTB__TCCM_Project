@@ -11,17 +11,20 @@ def convert_fortran_to_python(num_string):
 
 def parameters_assigment(all_params):
     
-    for i,line in enumerate(all_params):
-        if 'kf' in line and i+1 < len(all_params):
+    #enumerate gives us the chance of getting the index of each element in the list
+    for i, line in enumerate(all_params): 
+        if 'kf' in line:
             print(line)
+            
+            #When there is a match, we look for the following line for storing the values
             kf = float(all_params[i+1])
             print(kf)
             
-        elif 'alpha' in line and i+1 < len(all_params):
+        elif 'alpha' in line:
             print(line)
             alpha = all_params[i+1].split()
             
-        elif 'Zeff' in line and i+1 < len(all_params):
+        elif 'Zeff' in line:
             print(line)
             zeff = all_params[i+1].split()
             
@@ -39,7 +42,7 @@ def repulsion_energy(num_atoms):
                 dist_ab += (coordinates[a,i]-coordinates[b,i])**2
                 
             dist_ab = np.sqrt(dist_ab)
-            print("Distance between",element_list[a],"and",element_list[b],"is:",dist_ab)    
+            print("Distance between",atom_list[a],"and",atom_list[b],"is:",dist_ab)    
             #repulsion_energy += (z_dict.get(element_list[a]) * z_dict.get(element_list[b])/dist_ab) * np.exp(-np.sqrt() * dist_ab ** kf) 
     
     return(repulsion_energy)
@@ -47,7 +50,7 @@ def repulsion_energy(num_atoms):
 if __name__ == '__main__': 
     st = time.time()
     
-    #Input control (NOTE:We will not use mol2 files)
+    #Input control 
     parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
     parser.add_argument('-i', required= True, help='molecule coordinates input')
     parser.add_argument('-p', required=True, help='parameters of the elements')
@@ -55,7 +58,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     molecule = args.i
     parameters = args.p
-    element_list = []
+    atom_list = []
 
     # Files reading
     with open(parameters,'r') as file:
@@ -69,7 +72,7 @@ if __name__ == '__main__':
         
         for n in range(num_atoms):
            data = file.readline().strip()
-           element_list.append(data.split()[0])
+           atom_list.append(data.split()[0])
            
            # After the first two lines, the atoms
            for i in range(3):
@@ -78,7 +81,7 @@ if __name__ == '__main__':
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
     for i in range(num_atoms):
-        print("Atom of the system:",element_list[i],"with coordinates:",coordinates[i,:])
+        print("Atom of the system:",atom_list[i],"with coordinates:",coordinates[i,:])
     
     parameters_assigment(all_params)
     repulsion_energy(num_atoms)
