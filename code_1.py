@@ -6,11 +6,26 @@ import numpy as np
 import argparse
 import time
 
+def convert_fortran_to_python(num_string):
+    return float(num_string.replace('d','e'))
+
 def parameters_assigment(all_params):
-    z_dict = dict()
-    kf = 1.5
     
-    return()
+    for i,line in enumerate(all_params):
+        if 'kf' in line and i+1 < len(all_params):
+            print(line)
+            kf = float(all_params[i+1])
+            print(kf)
+            
+        elif 'alpha' in line and i+1 < len(all_params):
+            print(line)
+            alpha = all_params[i+1].split()
+            
+        elif 'Zeff' in line and i+1 < len(all_params):
+            print(line)
+            zeff = all_params[i+1].split()
+            
+    return(kf,alpha,zeff)
 
 
 def repulsion_energy(num_atoms):
@@ -44,7 +59,8 @@ if __name__ == '__main__':
 
     # Files reading
     with open(parameters,'r') as file:
-       all_params = file.read()
+       all_params = file.read().split('\n')
+       print(all_params)
        
     with open(molecule,'r') as file:
         num_atoms = int(file.readline().strip())
@@ -64,7 +80,9 @@ if __name__ == '__main__':
     for i in range(num_atoms):
         print("Atom of the system:",element_list[i],"with coordinates:",coordinates[i,:])
     
+    parameters_assigment(all_params)
     repulsion_energy(num_atoms)
+    
     
     et = time.time()
     
