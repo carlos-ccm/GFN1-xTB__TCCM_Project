@@ -15,6 +15,8 @@ def parameters_assigment(all_params):
     zeff_dict = {}
     q_dict = {}
     r_dict = {}
+    ref_coord_num_dict = {}
+    na_nb_dict ={}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -53,8 +55,19 @@ def parameters_assigment(all_params):
             for key, value in zip(element_list,radii):
                 r_dict [key] = convert_fortran_to_python(value) * (4/3) * (1/distance_conversion)
     
+        elif 'Reference coordination' in line:
+            j = 0
+            for key in element_list:
+                j += 1   
+                ref_coord_num_dict [key] = all_params[i+j].split() #This dict contains the reference coordination numbers CN_i^A per atom type
+        
+        elif 'Number of reference coordination' in line:
+            ref_coord_num = all_params[i+1].split()
+            for key,value in zip(element_list,ref_coord_num):
+                na_nb_dict [key] = value #This dict contains the number of reference coordination numbers
+     
 
-    return(distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict)
+    return(distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -73,7 +86,7 @@ def repulsion_contribution():
             print("Distance between",atom_list[a],"and",atom_list[b],"is:",dist_ab)    
             repulsion_energy += (convert_fortran_to_python(zeff_dict.get(atom_list[a])) * convert_fortran_to_python( zeff_dict.get(atom_list[b])))/(dist_ab) * np.exp(-np.sqrt(convert_fortran_to_python(alpha_dict.get(atom_list[a]))*convert_fortran_to_python(alpha_dict.get(atom_list[b]))) * dist_ab ** kf) 
     
-    print("Repulsion energy is:",repulsion_energy,'Hartree')
+    print("\n----------------------------------------------------\n| Repulsion energy is:",repulsion_energy,'Hartree |\n----------------------------------------------------\n')
     return(repulsion_energy)
 ###############################################################################################################
 
@@ -87,13 +100,21 @@ def switcher(n):
     return(value)
 
 def cn(a,b,n,coord_number):
-
+    
+    print(str(atom_list[a] + ' ' + '-' + ' ' + atom_list[b]))
     if n == 6:
-        value = 1
+        l_ij_acc = 0
+        for atom_a in range(int(na_nb_dict.get(atom_list[a]))):
+            for atom_b in range(int(na_nb_dict.get(atom_list[b]))):
+                l_ij = np.exp(-kl * ((coord_number - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) 
+                value = 1
+                l_ij_acc += l_ij
+       
     elif n == 8:
         c6 =   1     
         value = 3 * c6 * np.sqrt(convert_fortran_to_python(q_dict.get(atom_list[a])) * convert_fortran_to_python(q_dict.get(atom_list[b])))
     
+    #This damping constant is just the rAB,0
     damping_constant = (9 * convert_fortran_to_python(q_dict.get(atom_list[a])) * convert_fortran_to_python(q_dict.get(atom_list[b]))) ** (1/4)
     
     return(value,damping_constant)
@@ -106,8 +127,14 @@ def damping_func(dist_ab,n,damping_constant):
 def coord_calc(a,num_atoms):
     coord_number = 0
     for b in range(num_atoms):
+        dist_ab = 0
         if b != a:
-            coord_number += (1 + np.exp(-kcn * r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) ** -1) 
+            for i in range(3):
+                dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
+                
+            dist_ab = np.sqrt(dist_ab)
+            coord_number += (1 + np.exp(-kcn * ((r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) / dist_ab - 1)))** -1 
+    return(coord_number)
 
 def dispersion_contribution():
     
@@ -115,17 +142,17 @@ def dispersion_contribution():
     dispersion_energy = 0
     for a in range(num_atoms):
         coord_number = coord_calc(a,num_atoms)
+        
         for b in range (a+1, num_atoms):
             dist_ab = 0
             for i in range(3):
                 dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2
-                
+
             dist_ab = np.sqrt(dist_ab)
             for n in [6, 8]:
                 cn_n,damping_constant= cn(a,b,n,coord_number)
                 dispersion_energy += ((-switcher(n) * cn_n)/(dist_ab**n)) * damping_func(dist_ab,n,damping_constant)
             
-    
     return(dispersion_energy)
 ###############################################################################################################
 
@@ -146,8 +173,6 @@ if __name__ == '__main__':
     with open(parameters,'r') as file:
        all_params = file.read().split('\n')
        
-          
-       
     with open(molecule,'r') as file:
         num_atoms = int(file.readline().strip())
         molecule_name = file.readline().strip()
@@ -163,19 +188,18 @@ if __name__ == '__main__':
            
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
-    for i in range(num_atoms):
-        print("Atom of the system:",atom_list[i],"with coordinates:",coordinates[i,:])
     
     element_list = ['H','C','N','O']
     
-    distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict= parameters_assigment(all_params)
+    distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
+    
+    for i in range(num_atoms):
+        print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
     
     repulsion_contribution()
     dispersion_contribution()
-    
-    
-    
+     
     et = time.time()
     
     print("Execution time in seconds {:.2f}".format(et-st))  
