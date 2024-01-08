@@ -6,6 +6,7 @@ import numpy as np
 import argparse
 import time
 
+
 def convert_fortran_to_python(num_string):
     return float(num_string.replace('d','e'))
 
@@ -101,7 +102,7 @@ def switcher(n):
 
 def cn(a,b,n,coord_number):
     
-    print(str(atom_list[a] + ' ' + '-' + ' ' + atom_list[b]))
+    
     if n == 6:
         l_ij_acc = 0
         for atom_a in range(int(na_nb_dict.get(atom_list[a]))):
@@ -156,6 +157,55 @@ def dispersion_contribution():
     return(dispersion_energy)
 ###############################################################################################################
 
+def basis_set_select(all_params):
+    
+    match = False
+    basis_functions = {}
+    intermediate_dict = {}
+    
+    #This part is for extracting specifically the part of parameters.dat that contains the information about the basis set
+    basis_sets_info = []
+    for line in all_params:
+        if '(c) d contraction' in line:
+            match = True
+            basis_sets_info.append(line)
+            
+        elif 'Hamiltonian' in line:
+            match = False
+            break
+        
+        elif match is True:
+            basis_sets_info.append(line)
+    
+    #Now we iterate again over the extracted part to obtain the basis set for each atom
+    for i in range(1,number_of_atom_types * 2*3,3): #the number of basis functions is just the number of atom types x basis functions per atom type x number of lines describing each basis function                atom_type_number = basis_sets_info[i].split()[0]
+        
+        atom_type = basis_sets_info[i].split()[0]
+        basis_function_type = basis_sets_info[i].split()[1]
+        number_of_primitives = basis_sets_info[i].split()[2]
+        
+        basis_function_zeta = basis_sets_info[i+1].split()
+        basis_function_contraction = basis_sets_info[i+2].split()
+        
+        #initialize of the basis functions dictionary
+        if atom_type not in basis_functions:
+            basis_functions[atom_type] = {}
+
+        # Ensure the inner dictionary has the basis_function_type key
+        if basis_function_type not in basis_functions[atom_type]:
+            basis_functions[atom_type][basis_function_type] = {}
+
+        # Update the inner dictionary with the extracted information
+        basis_functions[atom_type][basis_function_type] = {
+            'Contraction': basis_function_contraction,
+            'Exponent': basis_function_zeta}
+        
+    #this is an example of loop for iterating over the basis function types
+    for i in basis_functions['1'].items():
+        print(i[0])
+    return (basis_functions)
+
+        
 if __name__ == '__main__': 
     st = time.time()
     
@@ -189,7 +239,20 @@ if __name__ == '__main__':
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
     
+    
     element_list = ['H','C','N','O']
+    number_of_atom_types =len(element_list)
+
+    dictionary_atom_types = {'H':1,'C':2,'N':3,'O':4}
+    electrons_per_atom_type = {'H':1,'C':4,'N':5,'O':6}
+    
+    system_elec = 0
+    
+    for i in range(num_atoms):
+        system_elec += electrons_per_atom_type.get(atom_list[i])
+    print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
+    print('Total number of shells and basis functions:',num_atoms*2)
+    
     
     distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
@@ -199,6 +262,7 @@ if __name__ == '__main__':
     
     repulsion_contribution()
     dispersion_contribution()
+    basis_functions = basis_set_select(all_params)
      
     et = time.time()
     
