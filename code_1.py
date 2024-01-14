@@ -6,9 +6,11 @@ import numpy as np
 import argparse
 import time
 
+##################################### TOOLS #####################################
 
 def convert_fortran_to_python(num_string):
     return float(num_string.replace('d','e'))
+###############################################################################################################
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
@@ -160,8 +162,8 @@ def dispersion_contribution():
 def basis_set_select(all_params):
     
     match = False
-    basis_functions = {}
-    intermediate_dict = {}
+    basis_functions_dict = {}
+
     
     #This part is for extracting specifically the part of parameters.dat that contains the information about the basis set
     basis_sets_info = []
@@ -178,7 +180,8 @@ def basis_set_select(all_params):
             basis_sets_info.append(line)
     
     #Now we iterate again over the extracted part to obtain the basis set for each atom
-    for i in range(1,number_of_atom_types * 2*3,3): #the number of basis functions is just the number of atom types x basis functions per atom type x number of lines describing each basis function                atom_type_number = basis_sets_info[i].split()[0]
+    for i in range(1,number_of_atom_types * 2*3,3): #the number of basis functions is just the number of atom types x basis functions per atom type x number of lines describing each basis function  
+        atom_type_number = basis_sets_info[i].split()[0]
         
         atom_type = basis_sets_info[i].split()[0]
         basis_function_type = basis_sets_info[i].split()[1]
@@ -188,23 +191,84 @@ def basis_set_select(all_params):
         basis_function_contraction = basis_sets_info[i+2].split()
         
         #initialize of the basis functions dictionary
-        if atom_type not in basis_functions:
-            basis_functions[atom_type] = {}
+        if atom_type not in basis_functions_dict:
+            basis_functions_dict[atom_type] = {}
 
-        # Ensure the inner dictionary has the basis_function_type key
-        if basis_function_type not in basis_functions[atom_type]:
-            basis_functions[atom_type][basis_function_type] = {}
+        #Ensure the inner dictionary has the basis_function_type key
+        if basis_function_type not in basis_functions_dict[atom_type]:
+            basis_functions_dict[atom_type][basis_function_type] = {}
 
-        # Update the inner dictionary with the extracted information
-        basis_functions[atom_type][basis_function_type] = {
+        #Update the inner dictionary with the extracted information
+        basis_functions_dict[atom_type][basis_function_type] = {
             'Contraction': basis_function_contraction,
             'Exponent': basis_function_zeta}
-        
-    #this is an example of loop for iterating over the basis function types
-    for i in basis_functions['1'].items():
-        print(i[0])
-    return (basis_functions)
 
+    basis_functions = {}
+    n = 0
+    for i,at in enumerate(atom_list):
+
+        for j in range(basis_functions_per_atom_type.get(at)):
+            
+            if j == 0:
+                function_type = 0
+            else:
+                function_type = 1
+            shell = list(basis_functions_dict[str(dictionary_atom_types.get(at))].items())[function_type][0]
+
+            basis_functions[n] = {
+            'Atom':at,
+            'Atom index':i,
+            'Function type':shell,
+            'Contraction':basis_functions_dict[str(dictionary_atom_types.get(at))][str(shell)]['Contraction'],
+            'Exponent':basis_functions_dict[str(dictionary_atom_types.get(at))][str(shell)]['Exponent']            
+            } 
+            n += 1
+
+    return (basis_functions_dict,basis_functions)
+
+def overlap_eval():
+
+    overlap = np.zeros((num_basis_funcs, num_basis_funcs))
+    for μ in range(num_basis_funcs):
+        for v in range(num_basis_funcs):
+            dist_ab = 0
+            
+            a = basis_functions[μ]['Atom index']
+            b = basis_functions[v]['Atom index']
+            
+            for i in range(3):
+                dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2
+            
+            dist_ab = np.sqrt(dist_ab)
+            
+            for k in range(len(basis_functions[μ]['Contraction'])):
+                
+                for l in range(len(basis_functions[v]['Contraction'])):
+                #k and l iterate over all the primitives of each basis function μ and ν
+           
+                    if basis_functions[μ]['Function type'][0] == '3' or basis_functions[v]['Function type'][0] == '3':
+                        overlap[μ,v] = 0       
+                        
+                    else:
+                        ζ_k = float(basis_functions[μ]['Exponent'][k])
+                        ζ_l = float(basis_functions[v]['Exponent'][l])
+                        d_k = float(basis_functions[μ]['Contraction'][k])
+                        d_l = float(basis_functions[v]['Contraction'][l])
+                        
+                        ζ = ζ_k + ζ_l 
+                        ξ = (ζ_k * ζ_l)/ζ
+
+                        overlap[μ,v] += d_k * d_l * np.exp(-ξ * (abs(dist_ab) ** 2)) * (np.pi/ζ) ** (3/2)  
+                        
+    print(overlap)
+    return(overlap)
+
+def electronic_energy():
+    ##Calculation of the electronic term is shown below ##    
+    #First the mu|H0|nu term, from the 0th order Hamiltonian
+         
+           
+    return()    
         
 if __name__ == '__main__': 
     st = time.time()
@@ -230,9 +294,9 @@ if __name__ == '__main__':
         
         for n in range(num_atoms):
            data = file.readline().strip()
-           atom_list.append(data.split()[0])
+           atom_list.append(data.split()[0]) #atom list is the list of atoms of the system
            
-           # After the first two lines, the atom's coordinates in Angstroms
+           #After the first two lines, the atom's coordinates in Angstroms
            for i in range(3):
                coordinates[n][i] = data.split()[i+1]
            
@@ -240,18 +304,21 @@ if __name__ == '__main__':
     print('Molecule of study:',molecule_name)
     
     
-    element_list = ['H','C','N','O']
-    number_of_atom_types =len(element_list)
+    element_list = ['H','C','N','O'] #list of elements present in the system
+    number_of_atom_types = len(element_list)
 
     dictionary_atom_types = {'H':1,'C':2,'N':3,'O':4}
     electrons_per_atom_type = {'H':1,'C':4,'N':5,'O':6}
+    basis_functions_per_atom_type = {'H':2,'C':4,'N':4,'O':4} #3 per p type
     
     system_elec = 0
+    num_basis_funcs = 0
     
     for i in range(num_atoms):
         system_elec += electrons_per_atom_type.get(atom_list[i])
+        num_basis_funcs += basis_functions_per_atom_type.get(atom_list[i])
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
-    print('Total number of shells and basis functions:',num_atoms*2)
+    print('Total number of shells and basis functions:',num_atoms*2,num_basis_funcs)
     
     
     distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict= parameters_assigment(all_params)
@@ -262,8 +329,10 @@ if __name__ == '__main__':
     
     repulsion_contribution()
     dispersion_contribution()
-    basis_functions = basis_set_select(all_params)
-     
+    basis_functions_dict, basis_functions = basis_set_select(all_params)
+    electronic_energy()
+    overlap_eval()
+    
     et = time.time()
     
     print("Execution time in seconds {:.2f}".format(et-st))  
