@@ -319,8 +319,7 @@ def overlap_eval():
 
 def electronic_energy():
     ##Calculation of the electronic term is shown below ##    
-    #First the mu|H0|nu term, from the 0th order Hamiltonian 
-    hey
+    #First the mu|H0|nu term, from the 0th order Hamiltonian
          
     return()    
         
@@ -387,7 +386,6 @@ if __name__ == '__main__':
     basis_functions_dict, basis_functions = basis_set_select(all_params)
     electronic_energy()
     overlap_eval()
-    
     
     et = time.time()
     
