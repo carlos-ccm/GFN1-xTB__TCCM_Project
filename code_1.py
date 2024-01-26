@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import sys 
-import os
 import numpy as np
 import argparse
 import time
@@ -227,39 +225,95 @@ def basis_set_select(all_params):
     return (basis_functions_dict,basis_functions)
 
 def overlap_eval():
-
     overlap = np.zeros((num_basis_funcs, num_basis_funcs))
-    for μ in range(num_basis_funcs):
-        for v in range(num_basis_funcs):
+    key_pp, key_sp, key_ss, key_ps, key_p,key_s = False,False,False,False,False,False
+    μ = 0
+    v = 0
+    while μ < num_basis_funcs:
+        while v < num_basis_funcs:          
             dist_ab = 0
-            
             a = basis_functions[μ]['Atom index']
             b = basis_functions[v]['Atom index']
             
-            for i in range(3):
-                dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2
+            if basis_functions[μ]['Function type'][0] == '3' and basis_functions[v]['Function type'][0] == '3':
+                key_pp = True
+                key_p = True
+
+            elif basis_functions[μ]['Function type'][0] == '3' and basis_functions[v]['Function type'][0] != '3':
+                
+                key_ps = True
+
+            elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] == '3':
+                key_sp = True
+                key_s = True
+
+            elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] != '3':
+                key_ss = True
             
+            for i in range(3):
+                dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2                            
             dist_ab = np.sqrt(dist_ab)
             
             for k in range(len(basis_functions[μ]['Contraction'])):
-                
                 for l in range(len(basis_functions[v]['Contraction'])):
-                #k and l iterate over all the primitives of each basis function μ and ν
-           
-                    if basis_functions[μ]['Function type'][0] == '3' or basis_functions[v]['Function type'][0] == '3':
-                        overlap[μ,v] = 0       
-                        
-                    else:
-                        ζ_k = float(basis_functions[μ]['Exponent'][k])
-                        ζ_l = float(basis_functions[v]['Exponent'][l])
-                        d_k = float(basis_functions[μ]['Contraction'][k])
-                        d_l = float(basis_functions[v]['Contraction'][l])
-                        
-                        ζ = ζ_k + ζ_l 
-                        ξ = (ζ_k * ζ_l)/ζ
+                    #k and l iterate over all the primitives of each basis function μ and ν
+                    #We need these terms for any integral, so we compute them now                     
+                    ζ_k = float(basis_functions[μ]['Exponent'][k])
+                    ζ_l = float(basis_functions[v]['Exponent'][l])
+                    d_k = float(basis_functions[μ]['Contraction'][k])
+                    d_l = float(basis_functions[v]['Contraction'][l])
+                    
+                    ζ = ζ_k + ζ_l 
+                    ξ = (ζ_k * ζ_l)/ζ
+                    
+                    r_p = (ζ_k * coordinates_bohr[a,:] + ζ_l * coordinates_bohr[b,:]) / ζ
+                    S_kμlv = np.exp(-ξ * (abs(dist_ab) ** 2)) * (np.pi/ζ) ** (3/2)   
+                                  
+                    if key_sp:
+                       overlap[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * S_kμlv
+                       overlap[μ,v+1] += d_k * d_l *  (r_p[1] - coordinates_bohr[b,1]) * S_kμlv
+                       overlap[μ,v+2] += d_k * d_l *  (r_p[2] - coordinates_bohr[b,2]) * S_kμlv
+                       
+                    elif key_pp:
+                        overlap[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0])* (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + 1/(2*ζ)*S_kμlv) #x|x
+                        overlap[μ+1,v+1] += d_k * d_l *  ((r_p[1] - coordinates_bohr[a,1])* (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + 1/(2*ζ)*S_kμlv) #y|y
+                        overlap[μ+2,v+2] += d_k * d_l *  ((r_p[2] - coordinates_bohr[a,2])* (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + 1/(2*ζ)*S_kμlv) #z|z
+                                                
+                        overlap[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
+                        overlap[μ+1,v] = overlap[μ,v+1] #y|x
+                        overlap[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
+                        overlap[μ+2,v] = overlap[μ,v+2] #z|x
+                        overlap[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
+                        overlap[μ+2,v+1] = overlap[μ,v+1] #z|y
 
-                        overlap[μ,v] += d_k * d_l * np.exp(-ξ * (abs(dist_ab) ** 2)) * (np.pi/ζ) ** (3/2)  
+                    elif key_ps:
+                        overlap[μ,v] += d_k * d_l *  (r_p[0] + coordinates_bohr[a,0]) * S_kμlv
+                        overlap[μ+1,v] += d_k * d_l *  (r_p[1] + coordinates_bohr[a,1]) * S_kμlv
+                        overlap[μ+2,v] += d_k * d_l *  (r_p[2] + coordinates_bohr[a,2]) * S_kμlv
                         
+                    elif key_ss:
+                        overlap[μ,v] += d_k * d_l * S_kμlv
+                        
+            if key_pp:
+                key_pp = False
+                v = v + 3 
+            elif key_ps:
+                key_ps = False
+                v = v + 1
+            elif key_sp:
+                key_sp = False
+                v = v + 3
+            elif key_ss:
+                key_ss = False
+                v = v + 1
+        if key_p:
+            μ = μ + 3
+            key_p = False
+        elif key_s:
+            μ += 1
+            key_s = False
+        v = 0
+                
     print(overlap)
     return(overlap)
 
@@ -267,7 +321,6 @@ def electronic_energy():
     ##Calculation of the electronic term is shown below ##    
     #First the mu|H0|nu term, from the 0th order Hamiltonian
          
-           
     return()    
         
 if __name__ == '__main__': 
@@ -326,6 +379,7 @@ if __name__ == '__main__':
     
     for i in range(num_atoms):
         print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
+    
     
     repulsion_contribution()
     dispersion_contribution()
