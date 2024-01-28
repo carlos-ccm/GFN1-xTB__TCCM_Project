@@ -5,19 +5,13 @@ import argparse
 import time
 
 ##################################### TOOLS #####################################
-
 def convert_fortran_to_python(num_string):
     return float(num_string.replace('d','e'))
 ###############################################################################################################
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
-    alpha_dict = {}
-    zeff_dict = {}
-    q_dict = {}
-    r_dict = {}
-    ref_coord_num_dict = {}
-    na_nb_dict ={}
+    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict = {},{},{},{},{},{},{},{},{}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -66,9 +60,49 @@ def parameters_assigment(all_params):
             ref_coord_num = all_params[i+1].split()
             for key,value in zip(element_list,ref_coord_num):
                 na_nb_dict [key] = value #This dict contains the number of reference coordination numbers
-     
+        elif 'KAB term' in line:
+            khh = (convert_fortran_to_python((all_params[i+1]).split()[0]))
+            khn = (convert_fortran_to_python((all_params[i+1]).split()[1]))
+        elif "kll'" in line:
+            off_diagonal_kll_elements = int(all_params[i+1].split()[0])
 
-    return(distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict)
+            for j in range(2,off_diagonal_kll_elements+2):
+                key1 = str((all_params[i+j]).split()[0])
+                key2 = str((all_params[i+j]).split()[1])
+                #initialize of the basis functions dictionary
+                if key1 not in kll_dict:
+                    kll_dict[key1] = {}
+
+                #Ensure the inner dictionary has the basis_function_type key
+                if key2 not in kll_dict[key1]:
+                    kll_dict[key1][key2] = {} 
+                kll_dict [key1][key2] = convert_fortran_to_python((all_params[i+j]).split()[2])
+        elif 'Scaling constants' in line:
+            kcn_dict['1'] = convert_fortran_to_python((all_params[i+1].split()[0]))
+            kcn_dict['2'] = convert_fortran_to_python((all_params[i+1].split()[1]))
+            kcn_dict['3'] = convert_fortran_to_python((all_params[i+1].split()[2]))
+        elif 'values of eta_A and kappa' in line:
+            for j in range(1,len(dictionary_atom_types)+1):
+                key_atom_type = str((all_params[i+j]).split()[0])
+                key_shell_type = str((all_params[i+j]).split()[1])
+
+                 #initialize of the basis functions dictionary
+                if key_atom_type not in hamiltonian_parameters_dict:
+                    hamiltonian_parameters_dict[key_atom_type] = {}
+
+                #Ensure the inner dictionary has the basis_function_type key
+                if key2 not in hamiltonian_parameters_dict[key_atom_type]:
+                    hamiltonian_parameters_dict[key_atom_type][key_shell_type] = {} 
+                    
+                hamiltonian_parameters_dict[key_atom_type][key_shell_type] = {
+                    'n0': int(all_params[i+j].split()[2]),
+                    'eta_Al': float(all_params[i+j].split()[3]),
+                    'HAl': convert_fortran_to_python((all_params[i+j]).split()[4]),
+                    'kpoly' : convert_fortran_to_python((all_params[i+j]).split()[5])}      
+        elif 'kEN' in line:
+            kEN = float(all_params[i+1])   
+    
+    return(distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -120,7 +154,6 @@ def cn(a,b,n,coord_number):
     return(value,damping_constant)
 
 def damping_func(dist_ab,n,damping_constant):
-    
     damp = (dist_ab**n)/((dist_ab**n) + (a1*damping_constant + a2) ** n)
     return(damp)
 
@@ -203,7 +236,6 @@ def basis_set_select(all_params):
     basis_functions = {}
     n = 0
     for i,at in enumerate(atom_list):
-
         for j in range(basis_functions_per_atom_type.get(at)):
             
             if j == 0:
@@ -224,7 +256,7 @@ def basis_set_select(all_params):
     return (basis_functions_dict,basis_functions)
 
 def overlap_eval():
-    overlap = np.zeros((num_basis_funcs, num_basis_funcs))
+    overlap_matrix = np.zeros((num_basis_funcs, num_basis_funcs))
     key_pp, key_sp, key_ss, key_ps, key_p,key_s = False,False,False,False,False,False
     μ = 0
     v = 0
@@ -239,7 +271,6 @@ def overlap_eval():
                 key_p = True
 
             elif basis_functions[μ]['Function type'][0] == '3' and basis_functions[v]['Function type'][0] != '3':
-                
                 key_ps = True
 
             elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] == '3':
@@ -269,29 +300,29 @@ def overlap_eval():
                     S_kμlv = np.exp(-ξ * (abs(dist_ab) ** 2)) * (np.pi/ζ) ** (3/2)   
                                   
                     if key_sp:
-                       overlap[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * S_kμlv
-                       overlap[μ,v+1] += d_k * d_l *  (r_p[1] - coordinates_bohr[b,1]) * S_kμlv
-                       overlap[μ,v+2] += d_k * d_l *  (r_p[2] - coordinates_bohr[b,2]) * S_kμlv
+                       overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * S_kμlv
+                       overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[1] - coordinates_bohr[b,1]) * S_kμlv
+                       overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[2] - coordinates_bohr[b,2]) * S_kμlv
                        
                     elif key_pp:
-                        overlap[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0])* (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + 1/(2*ζ)*S_kμlv) #x|x
-                        overlap[μ+1,v+1] += d_k * d_l *  ((r_p[1] - coordinates_bohr[a,1])* (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + 1/(2*ζ)*S_kμlv) #y|y
-                        overlap[μ+2,v+2] += d_k * d_l *  ((r_p[2] - coordinates_bohr[a,2])* (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + 1/(2*ζ)*S_kμlv) #z|z
+                        overlap_matrix[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0])* (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + 1/(2*ζ)*S_kμlv) #x|x
+                        overlap_matrix[μ+1,v+1] += d_k * d_l *  ((r_p[1] - coordinates_bohr[a,1])* (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + 1/(2*ζ)*S_kμlv) #y|y
+                        overlap_matrix[μ+2,v+2] += d_k * d_l *  ((r_p[2] - coordinates_bohr[a,2])* (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + 1/(2*ζ)*S_kμlv) #z|z
                                                 
-                        overlap[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
-                        overlap[μ+1,v] = overlap[μ,v+1] #y|x
-                        overlap[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
-                        overlap[μ+2,v] = overlap[μ,v+2] #z|x
-                        overlap[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
-                        overlap[μ+2,v+1] = overlap[μ,v+1] #z|y
+                        overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
+                        overlap_matrix[μ+1,v] = overlap_matrix[μ,v+1] #y|x
+                        overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
+                        overlap_matrix[μ+2,v] = overlap_matrix[μ,v+2] #z|x
+                        overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
+                        overlap_matrix[μ+2,v+1] = overlap_matrix[μ,v+1] #z|y
 
                     elif key_ps:
-                        overlap[μ,v] += d_k * d_l *  (r_p[0] + coordinates_bohr[a,0]) * S_kμlv
-                        overlap[μ+1,v] += d_k * d_l *  (r_p[1] + coordinates_bohr[a,1]) * S_kμlv
-                        overlap[μ+2,v] += d_k * d_l *  (r_p[2] + coordinates_bohr[a,2]) * S_kμlv
+                        overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] + coordinates_bohr[a,0]) * S_kμlv
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] + coordinates_bohr[a,1]) * S_kμlv
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] + coordinates_bohr[a,2]) * S_kμlv
                         
                     elif key_ss:
-                        overlap[μ,v] += d_k * d_l * S_kμlv
+                        overlap_matrix[μ,v] += d_k * d_l * S_kμlv
                         
             if key_pp:
                 key_pp = False
@@ -313,8 +344,8 @@ def overlap_eval():
             key_s = False
         v = 0
                 
-    #print(overlap)
-    return(overlap)
+    print(overlap_matrix)
+    return(overlap_matrix)
 
 def inverse_square_root_overlap(overlap_matrix):
     eigenvalues, eigenvectors = np.linalg.eig(overlap_matrix)
@@ -322,21 +353,34 @@ def inverse_square_root_overlap(overlap_matrix):
     Λ = np.diag(eigenvalues) #this is the diagonal matrix Λ = L^-1 * S * L (L^-1 is denoted in the code as L_inv) 
     L_inv = np.linalg.inv(L) # as this is unitary, transpose of L is equivalent to inverse of L
     Λ_inv_sqrt = np.diag(1 / np.sqrt(eigenvalues))
-    
     S_inv_sqrt = L @ Λ_inv_sqrt @ L_inv
-    print(S_inv_sqrt)
+
     return(S_inv_sqrt)
 
-def electronic_energy():
+def scaling_function(μ,v,basis_functions):
+    if  (basis_functions[μ]['Atom'] == 'H' and basis_functions[v]['Atom'] == 'H'):
+        scaling_parameter = khh
+    elif (basis_functions[μ]['Atom'] == 'N' and basis_functions[v]['Atom'] == 'H') or (basis_functions[μ]['Atom'] == 'H' and basis_functions[v]['Atom'] == 'N'):
+        scaling_parameter = khn
+    else:
+        scaling_parameter = 1 
+           
+    return (scaling_parameter)
+
+def electronic_energy(basis_functions):
     ##Calculation of the electronic term is shown below ##    
-    #First the mu|H0|nu term, from the 0th order Hamiltonian 
+        #First the mu|H0|nu term, from the 0th order Hamiltonian
+    H0 = np.zeros((num_basis_funcs,num_basis_funcs))
     for μ in range(num_basis_funcs):
-       for v in range(num_basis_funcs):  
-           if μ == nu:
-               
-               
-           else:
-               
+       for v in range(num_basis_funcs):
+            h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
+            h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * coord_calc(basis_functions[v]['Atom index'], num_atoms)) #effective atomic energy level h_l_b
+            if μ == v:
+                H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
+            else:
+                scaling_parameter = scaling_function(μ,v,basis_functions)
+                H0[μ,v]  = scaling_parameter * kll_dict[basis_functions[μ]['Function type'][0]][ basis_functions[v]['Function type'][0]] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * (1 + kEN)
+                #Electrongeativiy next
     return()    
         
 if __name__ == '__main__': 
@@ -390,7 +434,7 @@ if __name__ == '__main__':
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_atoms*2,num_basis_funcs)
     
-    distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict= parameters_assigment(all_params)
+    distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
@@ -406,7 +450,7 @@ if __name__ == '__main__':
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
     
-    electronic_energy()
+    electronic_energy(basis_functions)
     
     
     et = time.time()
