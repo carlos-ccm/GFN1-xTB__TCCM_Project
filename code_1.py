@@ -83,8 +83,7 @@ def repulsion_contribution():
             for i in range(3):
                 dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2
                 
-            dist_ab = np.sqrt(dist_ab)
-            print("Distance between",atom_list[a],"and",atom_list[b],"is:",dist_ab)    
+            dist_ab = np.sqrt(dist_ab)   
             repulsion_energy += (convert_fortran_to_python(zeff_dict.get(atom_list[a])) * convert_fortran_to_python( zeff_dict.get(atom_list[b])))/(dist_ab) * np.exp(-np.sqrt(convert_fortran_to_python(alpha_dict.get(atom_list[a]))*convert_fortran_to_python(alpha_dict.get(atom_list[b]))) * dist_ab ** kf) 
     
     print("\n----------------------------------------------------\n| Repulsion energy is:",repulsion_energy,'Hartree |\n----------------------------------------------------\n')
@@ -314,14 +313,30 @@ def overlap_eval():
             key_s = False
         v = 0
                 
-    print(overlap)
+    #print(overlap)
     return(overlap)
+
+def inverse_square_root_overlap(overlap_matrix):
+    eigenvalues, eigenvectors = np.linalg.eig(overlap_matrix)
+    L = eigenvectors
+    Λ = np.diag(eigenvalues) #this is the diagonal matrix Λ = L^-1 * S * L (L^-1 is denoted in the code as L_inv) 
+    L_inv = np.linalg.inv(L) # as this is unitary, transpose of L is equivalent to inverse of L
+    Λ_inv_sqrt = np.diag(1 / np.sqrt(eigenvalues))
+    
+    S_inv_sqrt = L @ Λ_inv_sqrt @ L_inv
+    print(S_inv_sqrt)
+    return(S_inv_sqrt)
 
 def electronic_energy():
     ##Calculation of the electronic term is shown below ##    
     #First the mu|H0|nu term, from the 0th order Hamiltonian 
-    hey
-         
+    for μ in range(num_basis_funcs):
+       for v in range(num_basis_funcs):  
+           if μ == nu:
+               
+               
+           else:
+               
     return()    
         
 if __name__ == '__main__': 
@@ -371,9 +386,9 @@ if __name__ == '__main__':
     for i in range(num_atoms):
         system_elec += electrons_per_atom_type.get(atom_list[i])
         num_basis_funcs += basis_functions_per_atom_type.get(atom_list[i])
+        
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_atoms*2,num_basis_funcs)
-    
     
     distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
@@ -381,12 +396,17 @@ if __name__ == '__main__':
     for i in range(num_atoms):
         print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
     
-    
+    #Simple terms of the energy, repulsion and dispersion
     repulsion_contribution()
     dispersion_contribution()
+    
+    
+    #Now we calculate the components of the electronic energy
     basis_functions_dict, basis_functions = basis_set_select(all_params)
+    overlap_matrix = overlap_eval()
+    S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
+    
     electronic_energy()
-    overlap_eval()
     
     
     et = time.time()
