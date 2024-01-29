@@ -11,7 +11,7 @@ def convert_fortran_to_python(num_string):
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
-    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict = {},{},{},{},{},{},{},{},{}
+    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2 = {},{},{},{},{},{},{},{},{},{},{}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -31,7 +31,8 @@ def parameters_assigment(all_params):
                 
         elif 'bohr to Angstrom' in line:
             distance_conversion = float(convert_fortran_to_python(all_params[i+1]))
-        
+        elif 'from eV to hartree' in line:
+            energy_conversion = float(convert_fortran_to_python(all_params[i+1]))
         elif 'QA values' in line:
             q = all_params[i+1].split()
             for key, value in zip(element_list,q):
@@ -45,7 +46,7 @@ def parameters_assigment(all_params):
             kcn = (convert_fortran_to_python((all_params[i+1]).split()[4]))
             kl = (convert_fortran_to_python((all_params[i+1]).split()[5]))
         
-        elif 'covalent radii' in line:
+        elif 'Unscaled covalent radii (in Angstrom) - for eq. 14 - ' in line:
             radii = all_params[i+1].split()
             for key, value in zip(element_list,radii):
                 r_dict [key] = convert_fortran_to_python(value) * (4/3) * (1/distance_conversion)
@@ -97,12 +98,20 @@ def parameters_assigment(all_params):
                 hamiltonian_parameters_dict[key_atom_type][key_shell_type] = {
                     'n0': int(all_params[i+j].split()[2]),
                     'eta_Al': float(all_params[i+j].split()[3]),
-                    'HAl': convert_fortran_to_python((all_params[i+j]).split()[4]),
+                    'HAl': convert_fortran_to_python((all_params[i+j]).split()[4]) * (1/energy_conversion),
                     'kpoly' : convert_fortran_to_python((all_params[i+j]).split()[5])}      
         elif 'kEN' in line:
-            kEN = float(all_params[i+1])   
-    
-    return(distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN)
+            kEN = convert_fortran_to_python(all_params[i+1])
+        elif 'Electronegativities' in line:
+            electronegativities = all_params[i+1].split()
+            for key,value in zip(element_list,electronegativities):
+                electronegativities_dict [key] = convert_fortran_to_python(value)   
+        elif 'Unscaled covalent radii (in Angstrom) R^\Pi_A,cov. For eq. 27.' in line:
+            radii_2 = all_params[i+1].split()
+            for key, value in zip(element_list,radii_2):
+                r_dict_2 [key] = convert_fortran_to_python(value) * (1/distance_conversion)
+                     
+    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -379,9 +388,27 @@ def electronic_energy(basis_functions):
                 H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
             else:
                 scaling_parameter = scaling_function(μ,v,basis_functions)
-                H0[μ,v]  = scaling_parameter * kll_dict[basis_functions[μ]['Function type'][0]][ basis_functions[v]['Function type'][0]] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * (1 + kEN)
-                #Electrongeativiy next
-    return()    
+                dist_ab = 0
+                a = basis_functions[μ]['Atom index']
+                b = basis_functions[v]['Atom index']
+                for i in range(3):
+                    dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2                            
+                dist_ab = np.sqrt(dist_ab)
+                R_AB = r_dict_2.get(basis_functions[μ]['Atom']) + r_dict_2.get(basis_functions[v]['Atom'])
+                        
+                pi_rab_ll = (1 + hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['kpoly'] * ((dist_ab/R_AB)**0.5)) * (1 + hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['kpoly'] * ((dist_ab/R_AB)**0.5))
+                if basis_functions[μ]['Function type'][0] == '2' or basis_functions[v]['Function type'][0] == '2':
+                    variation_electronegativity_term = 1
+                else:
+                    variation_electronegativity_term = 1 + kEN * (electronegativities_dict.get(basis_functions[μ]['Atom']) - electronegativities_dict.get(basis_functions[v]['Atom']))**2
+                
+                if float(basis_functions[μ]['Function type'][0]) <= float(basis_functions[v]['Function type'][0]):
+                    H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[μ]['Function type'][0])][str(basis_functions[v]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll
+                else:
+                    H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                
+    print("\n0th Hamiltonian\n")
+    print(H0)
+    return(H0)    
         
 if __name__ == '__main__': 
     st = time.time()
@@ -434,7 +461,7 @@ if __name__ == '__main__':
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_atoms*2,num_basis_funcs)
     
-    distance_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN= parameters_assigment(all_params)
+    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
@@ -450,7 +477,7 @@ if __name__ == '__main__':
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
     
-    electronic_energy(basis_functions)
+    H0 = electronic_energy(basis_functions)
     
     
     et = time.time()
