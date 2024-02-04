@@ -11,7 +11,7 @@ def convert_fortran_to_python(num_string):
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
-    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2 = {},{},{},{},{},{},{},{},{},{},{}
+    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2,gamma_dict = {},{},{},{},{},{},{},{},{},{},{},{}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -111,7 +111,12 @@ def parameters_assigment(all_params):
             radii_2 = all_params[i+1].split()
             for key, value in zip(element_list,radii_2):
                 r_dict_2 [key] = convert_fortran_to_python(value) * (1/distance_conversion)          
-    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2)
+        elif 'Charge derivative' in line:
+            gamma = all_params[i+2].split()
+            for key,value in zip(element_list,gamma):
+                gamma_dict [key] = convert_fortran_to_python(value)
+                
+    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -143,7 +148,6 @@ def switcher(n):
     return(value)
 
 def cn(a,b,n,coord_number):
-    
     
     if n == 6:
         l_ij_acc = 0
@@ -369,7 +373,6 @@ def inverse_square_root_overlap(overlap_matrix):
     L_inv = np.linalg.inv(L) # as this is unitary, transpose of L is equivalent to inverse of L
     Λ_inv_sqrt = np.diag(1 / np.sqrt(eigenvalues))
     S_inv_sqrt = L @ Λ_inv_sqrt @ L_inv
-
     return(S_inv_sqrt)
 
 def scaling_function(μ,v,basis_functions):
@@ -391,7 +394,7 @@ def electronic_energy(basis_functions,shell_dict):
             
             h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
             h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * coord_calc(basis_functions[v]['Atom index'], num_atoms)) #effective atomic energy level h_l_b
-            if μ == v: #(incluir si el atom index es el mismo aqui)
+            if μ == v:
                 H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
             else:
                 scaling_parameter = scaling_function(μ,v,basis_functions)
@@ -474,7 +477,16 @@ def electronic_energy(basis_functions,shell_dict):
         #New Fock matrix calculation
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
-                fock_matrix[A,B] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] *()
+                shell_shift_a = 0
+                shell_shift_b = 0
+                
+                atom_shift_a = gamma_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))] * (q[basis_functions[μ]['Atom index']]** 2)
+                atom_shift_b = gamma_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))] * (q[basis_functions[v]['Atom index']]** 2)
+                for B in range(num_shells):
+                    shell_shift_a += gamma[A,B] * 
+                    shell_shift_b += gamma[A,B] * 
+                
+                fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift_a + shell_shift_b + atom_shift_a + atom_shift_b)
                
         error = 0 
             
@@ -532,7 +544,7 @@ if __name__ == '__main__':
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_shells,num_basis_funcs)
     
-    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2= parameters_assigment(all_params)
+    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict= parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
