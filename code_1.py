@@ -442,34 +442,40 @@ def electronic_energy(basis_functions,shell_dict):
         fock_matrix_prime = np.transpose(S_inv_sqrt) @ fock_matrix @ S_inv_sqrt
         eigenvalues, C_prime = np.linalg.eig(fock_matrix_prime)
         C = S_inv_sqrt @ C_prime
-        print("\nEigenvalues")
-        print(eigenvalues)
-        
-        print("\nH0 prime")
-        print(fock_matrix_prime)
-        print("Coefficients not ordered:")
-        print(C)
         sorted_indices = np.argsort (eigenvalues)
-        print("Sorted eigenvalues:",eigenvalues[sorted_indices])
+        
         for i in range(len(sorted_indices)):
             C_ordered[i,:] = C[:,sorted_indices[i]]
-                
-        print("\nCoefficient matrix ordered")
-        print(C_ordered)
         
+        #Density matrix calculation
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
                 for k in range(int(system_elec/2)):
                     P_matrix[μ,v] += C_ordered[k,μ] * C_ordered[k,v]
         P_matrix = 2 * P_matrix
-        print("\nP matrix is:")
-        print(P_matrix)
         
-        print(hamiltonian_parameters_dict)
+        #Atomic charge
         for n in range(num_atoms): #there is a charge for every atom
+            A = dictionary_atom_types.get(atom_list[n])            
             for l in range(2):
-                q[n] += hamiltonian_parameters_dict[][]['n0'] - overlap_matrix[μ,v] * P_matrix[μ,v]  #This charge is the sum of the charge of each shell on this atom
+                mulliken_population = 0
+                shell_type = list(basis_functions_dict[str(A)].items())[l][0]
+                for μ in range(num_basis_funcs):
+                    if basis_functions[μ]['Atom index'] != n:
+                        continue
+                    if basis_functions[μ]['Function type'][0] != shell_type:
+                        continue
+                    else:
+                        for v in range(num_basis_funcs):
+                            mulliken_population += P_matrix[μ,v] * overlap_matrix[μ,v]
+                q[n] += hamiltonian_parameters_dict[str(A)][shell_type]['n0'] - mulliken_population  #This charge is the sum of the charge of each shell on this atom
+        print(q)
         
+        #New Fock matrix calculation
+        for μ in range(num_basis_funcs):
+            for v in range(num_basis_funcs):
+                fock_matrix[A,B] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] *()
+               
         error = 0 
             
     return(H0)    
