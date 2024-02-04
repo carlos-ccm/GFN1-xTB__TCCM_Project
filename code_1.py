@@ -83,8 +83,9 @@ def parameters_assigment(all_params):
             kcn_dict['2'] = convert_fortran_to_python((all_params[i+1].split()[1]))
             kcn_dict['3'] = convert_fortran_to_python((all_params[i+1].split()[2]))
         elif 'values of eta_A and kappa' in line:
-            for j in range(1,len(dictionary_atom_types)+1):
+            for j in range(1,2*(len(dictionary_atom_types))+1):
                 key_atom_type = str((all_params[i+j]).split()[0])
+                print("atoms type:",key_atom_type)
                 key_shell_type = str((all_params[i+j]).split()[1])
 
                  #initialize of the basis functions dictionary
@@ -109,8 +110,7 @@ def parameters_assigment(all_params):
         elif 'Unscaled covalent radii (in Angstrom) R^\Pi_A,cov. For eq. 27.' in line:
             radii_2 = all_params[i+1].split()
             for key, value in zip(element_list,radii_2):
-                r_dict_2 [key] = convert_fortran_to_python(value) * (1/distance_conversion)
-                     
+                r_dict_2 [key] = convert_fortran_to_python(value) * (1/distance_conversion)          
     return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2)
 ###############################################################################################################
 
@@ -432,9 +432,11 @@ def electronic_energy(basis_functions,shell_dict):
     
     #now we start the SCF process
     fock_matrix = H0
-    P_matrix = np.array((num_basis_funcs,num_basis_funcs))
+    P_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
+    C_ordered = np.zeros((num_basis_funcs,num_basis_funcs))
     error = 100000000
     threshold = 1
+    q = [0] * num_atoms 
     while error > threshold:
         
         fock_matrix_prime = np.transpose(S_inv_sqrt) @ fock_matrix @ S_inv_sqrt
@@ -445,21 +447,29 @@ def electronic_energy(basis_functions,shell_dict):
         
         print("\nH0 prime")
         print(fock_matrix_prime)
-        
+        print("Coefficients not ordered:")
+        print(C)
         sorted_indices = np.argsort (eigenvalues)
+        print("Sorted eigenvalues:",eigenvalues[sorted_indices])
         for i in range(len(sorted_indices)):
-            print(i,sorted_indices[i])
-            C[i,:] = C[:,sorted_indices[i]]
+            C_ordered[i,:] = C[:,sorted_indices[i]]
                 
         print("\nCoefficient matrix ordered")
-        print(C)
+        print(C_ordered)
         
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
-                for k in range(1,int(num_shells/2)):
-                    P_matrix[μ,v] += C[μ,k] @ C[v,k]
+                for k in range(int(system_elec/2)):
+                    P_matrix[μ,v] += C_ordered[k,μ] * C_ordered[k,v]
         P_matrix = 2 * P_matrix
+        print("\nP matrix is:")
         print(P_matrix)
+        
+        print(hamiltonian_parameters_dict)
+        for n in range(num_atoms): #there is a charge for every atom
+            for l in range(2):
+                q[n] += hamiltonian_parameters_dict[][]['n0'] - overlap_matrix[μ,v] * P_matrix[μ,v]  #This charge is the sum of the charge of each shell on this atom
+        
         error = 0 
             
     return(H0)    
