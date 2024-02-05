@@ -479,15 +479,18 @@ def electronic_energy(basis_functions,shell_dict):
             for v in range(num_basis_funcs):
                 shell_shift_a = 0
                 shell_shift_b = 0
-                
-                atom_shift_a = gamma_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))] * (q[basis_functions[μ]['Atom index']]** 2)
-                atom_shift_b = gamma_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))] * (q[basis_functions[v]['Atom index']]** 2)
+                atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q[basis_functions[μ]['Atom index']]** 2)
+                atom_shift_b = gamma_dict[str(basis_functions[v]['Atom'])] * (q[basis_functions[v]['Atom index']]** 2)
                 for B in range(num_shells):
-                    shell_shift_a += gamma[A,B] * 
-                    shell_shift_b += gamma[A,B] * 
-                
+                    shell_shift_a += gamma[A,B] * q[shell_dict[B]['Index']]
+                for A in range(num_shells):
+                    shell_shift_b += gamma[A,B] * q[shell_dict[A]['Index']]
+                print(shell_shift_a,shell_shift_b)
                 fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift_a + shell_shift_b + atom_shift_a + atom_shift_b)
-               
+        first_order_energy = 1
+        second_order_energy =1
+        third_order_energy =1
+        print(fock_matrix)     
         error = 0 
             
     return(H0)    
