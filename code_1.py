@@ -438,9 +438,11 @@ def electronic_energy(basis_functions,shell_dict):
     P_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
     C_ordered = np.zeros((num_basis_funcs,num_basis_funcs))
     error = 100000000
-    threshold = 1
-    q = [0] * num_atoms 
-    while error > threshold:
+    threshold = 10**(-6)
+    it = 1
+    q = [0] * num_atoms
+    previous_energy = 0 
+    while abs(error) > threshold:
         
         fock_matrix_prime = np.transpose(S_inv_sqrt) @ fock_matrix @ S_inv_sqrt
         eigenvalues, C_prime = np.linalg.eig(fock_matrix_prime)
@@ -473,25 +475,30 @@ def electronic_energy(basis_functions,shell_dict):
                             mulliken_population += P_matrix[μ,v] * overlap_matrix[μ,v]
                 q[n] += hamiltonian_parameters_dict[str(A)][shell_type]['n0'] - mulliken_population  #This charge is the sum of the charge of each shell on this atom
         print(q)
+        first_order_energy = 0
         
         #New Fock matrix calculation
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
                 shell_shift_a = 0
                 shell_shift_b = 0
-                atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q[basis_functions[μ]['Atom index']]** 2)
+                atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q[basis_functions[μ]['Atom index']]** 2) 
                 atom_shift_b = gamma_dict[str(basis_functions[v]['Atom'])] * (q[basis_functions[v]['Atom index']]** 2)
+                A = basis_functions[μ]['Atom index']
+                B = basis_functions[v]['Atom index']
                 for B in range(num_shells):
                     shell_shift_a += gamma[A,B] * q[shell_dict[B]['Index']]
                 for A in range(num_shells):
                     shell_shift_b += gamma[A,B] * q[shell_dict[A]['Index']]
-                print(shell_shift_a,shell_shift_b)
                 fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift_a + shell_shift_b + atom_shift_a + atom_shift_b)
-        first_order_energy = 1
-        second_order_energy =1
-        third_order_energy =1
-        print(fock_matrix)     
-        error = 0 
+                first_order_energy += P_matrix[μ,v] * H0[μ,v]
+        print("First order energy is:",first_order_energy,"for iteration:",it)
+        print("Fock matrix, iteration:",it)
+        print(fock_matrix)
+        it +=1     
+        error = first_order_energy - previous_energy
+        print(error)
+        previous_energy = first_order_energy 
             
     return(H0)    
         
