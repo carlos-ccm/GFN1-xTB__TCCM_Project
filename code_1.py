@@ -223,11 +223,9 @@ def basis_set_select(all_params):
     
     #Now we iterate again over the extracted part to obtain the basis set for each atom
     for i in range(1,number_of_atom_types * 2*3,3): #the number of basis functions is just the number of atom types x basis functions per atom type x number of lines describing each basis function  
-        atom_type_number = basis_sets_info[i].split()[0]
         
         atom_type = basis_sets_info[i].split()[0]
         basis_function_type = basis_sets_info[i].split()[1]
-        number_of_primitives = basis_sets_info[i].split()[2]
         
         basis_function_zeta = basis_sets_info[i+1].split()
         basis_function_contraction = basis_sets_info[i+2].split()
@@ -385,7 +383,7 @@ def scaling_function(μ,v,basis_functions):
            
     return (scaling_parameter)
         
-def electronic_energy(basis_functions,shell_dict):
+def zeroth_order_hamiltonian(basis_functions,shell_dict):
     ##Calculation of the electronic term is shown below ##    
     #First the mu|H0|nu term, from the 0th order Hamiltonian
     H0 = np.zeros((num_basis_funcs,num_basis_funcs))
@@ -432,17 +430,21 @@ def electronic_energy(basis_functions,shell_dict):
             η_B = hamiltonian_parameters_dict[str(dictionary_atom_types.get(shell_dict[B]['Element']))][shell_dict[B]['Shell type']]['eta_Al']
             η_AB = 1 / (0.5 * (1/η_A + 1/η_B))
             gamma[A,B] = (1 / ((dist_ab)**kg + (η_AB)**(-kg))) ** (1/kg)
+    return(H0,gamma)
+
+def SCF(zeroth_hamiltonian_matrix,gamma):
     
     #now we start the SCF process
-    fock_matrix = H0
+    fock_matrix = zeroth_hamiltonian_matrix
+    new_fock_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
     error = 100000000
-    threshold = 10**(-6)
+    threshold = 10**(-7)
     it = 1
     q = [0] * num_shells
     previous_energy = 0 
-    abs(error) > threshold
-    while it <3:
+    while abs(error) > threshold:
         q_damped_atom = []
+        q_new_atom = []
         q_new = [0] * num_shells
         q_damped = [0] * num_shells
         P_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
@@ -492,13 +494,20 @@ def electronic_energy(basis_functions,shell_dict):
         
         for i in range(0,len(q_damped),2):
             q_damped_atom.append(q_damped[i] + q_damped[i+1])
+            q_new_atom.append(q_new[i] + q_new[i+1])
 
+        first_order_energy,second_order_energy,third_order_energy = 0, 0, 0
+        for A in range(num_atoms):
+            third_order_energy += (q_new_atom[A]**3) * gamma_dict[atom_list[A]]
+
+        #Loops over the number of shells, for calculating both the shell shift and the second energy term
         for A in range(num_shells):
             shell_shift_a = 0
             shell_shift_index = str(shell_dict[A]['Index'])
             shell_shift_type = str(shell_dict[A]['Shell type'])
             for B in range(num_shells):
                 shell_shift_a += gamma[A,B] * q_damped[B]
+                second_order_energy += gamma[A,B] * q_new[A] * q_new[B] 
                 
             #initialize of shell shift dictionary
             if shell_shift_index not in shell_shift:
@@ -508,34 +517,30 @@ def electronic_energy(basis_functions,shell_dict):
                 shell_shift[shell_shift_index][shell_shift_type] = {}
                 
             shell_shift[shell_shift_index][shell_shift_type] = shell_shift_a
-            
-        first_order_energy = 0
-        for μ in range(num_basis_funcs):
-            for v in range(num_basis_funcs):
-                first_order_energy += P_matrix[μ,v] * H0[μ,v]
-                    
+  
         #New Fock matrix calculation
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
                 atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q_damped_atom[basis_functions[μ]['Atom index']]** 2) 
                 atom_shift_b = gamma_dict[str(basis_functions[v]['Atom'])] * (q_damped_atom[basis_functions[v]['Atom index']]** 2)
-                fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift[str(basis_functions[μ]['Atom index'])][str(basis_functions[μ]['Function type'][0])] + shell_shift[str(basis_functions[v]['Atom index'])][str(basis_functions[v]['Function type'][0])] + atom_shift_a + atom_shift_b)
-                
-                
-        print("First order energy is:",first_order_energy,"for iteration:",it)
-        print("Second order energy is:",)
-        print("Fock matrix, iteration:",it)
-        print(fock_matrix)
-        it +=1     
-        error = abs(first_order_energy - previous_energy)
-        #error=0
+                new_fock_matrix[μ,v] = zeroth_hamiltonian_matrix[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift[str(basis_functions[μ]['Atom index'])][str(basis_functions[μ]['Function type'][0])] + shell_shift[str(basis_functions[v]['Atom index'])][str(basis_functions[v]['Function type'][0])] + atom_shift_a + atom_shift_b)
+                first_order_energy += P_matrix[μ,v] * zeroth_hamiltonian_matrix[μ,v]
+
+        total_electronic_energy = first_order_energy + second_order_energy/2 + third_order_energy/3
+        print(f"{it}    {total_electronic_energy:.8f}   {first_order_energy:.6f}    {second_order_energy/2:.6f}     {third_order_energy/3:.6f}")
+        #print(new_fock_matrix)
         
-        #We store previous charges 
+        it +=1     
+        error = abs(total_electronic_energy - previous_energy)
+
+        #We store previous values
+        fock_matrix = new_fock_matrix 
         q = q_damped
-        print("Error obtained:",error)
-        previous_energy = first_order_energy 
+        previous_energy = total_electronic_energy 
+        
+        #print("Error obtained:",error)
             
-    return(H0)    
+    return    
         
 if __name__ == '__main__': 
     st = time.time()
@@ -604,7 +609,8 @@ if __name__ == '__main__':
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
     
-    H0 = electronic_energy(basis_functions,shell_dict)
+    zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
+    SCF(zeroth_hamiltonian_matrix,gamma)
    
     et = time.time()   
     print("Execution time in seconds {:.2f}".format(et-st))  
