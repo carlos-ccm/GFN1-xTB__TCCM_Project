@@ -85,7 +85,7 @@ def parameters_assigment(all_params):
         elif 'values of eta_A and kappa' in line:
             for j in range(1,2*(len(dictionary_atom_types))+1):
                 key_atom_type = str((all_params[i+j]).split()[0])
-                print("atoms type:",key_atom_type)
+                
                 key_shell_type = str((all_params[i+j]).split()[1])
 
                  #initialize of the basis functions dictionary
@@ -93,7 +93,7 @@ def parameters_assigment(all_params):
                     hamiltonian_parameters_dict[key_atom_type] = {}
 
                 #Ensure the inner dictionary has the basis_function_type key
-                if key2 not in hamiltonian_parameters_dict[key_atom_type]:
+                if key_shell_type not in hamiltonian_parameters_dict[key_atom_type]:
                     hamiltonian_parameters_dict[key_atom_type][key_shell_type] = {} 
                     
                 hamiltonian_parameters_dict[key_atom_type][key_shell_type] = {
@@ -435,14 +435,20 @@ def electronic_energy(basis_functions,shell_dict):
     
     #now we start the SCF process
     fock_matrix = H0
-    P_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
-    C_ordered = np.zeros((num_basis_funcs,num_basis_funcs))
     error = 100000000
     threshold = 10**(-6)
     it = 1
-    q = [0] * num_atoms
+    q = [0] * num_shells
     previous_energy = 0 
-    while abs(error) > threshold:
+    abs(error) > threshold
+    while it <3:
+        q_damped_atom = []
+        q_new = [0] * num_shells
+        q_damped = [0] * num_shells
+        P_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
+        C_ordered = np.zeros((num_basis_funcs,num_basis_funcs))
+        shell_shift = {}
+        condition_damping = False
         
         fock_matrix_prime = np.transpose(S_inv_sqrt) @ fock_matrix @ S_inv_sqrt
         eigenvalues, C_prime = np.linalg.eig(fock_matrix_prime)
@@ -459,45 +465,74 @@ def electronic_energy(basis_functions,shell_dict):
                     P_matrix[μ,v] += C_ordered[k,μ] * C_ordered[k,v]
         P_matrix = 2 * P_matrix
         
-        #Atomic charge
-        for n in range(num_atoms): #there is a charge for every atom
-            A = dictionary_atom_types.get(atom_list[n])            
-            for l in range(2):
-                mulliken_population = 0
-                shell_type = list(basis_functions_dict[str(A)].items())[l][0]
-                for μ in range(num_basis_funcs):
-                    if basis_functions[μ]['Atom index'] != n:
-                        continue
-                    if basis_functions[μ]['Function type'][0] != shell_type:
-                        continue
-                    else:
-                        for v in range(num_basis_funcs):
-                            mulliken_population += P_matrix[μ,v] * overlap_matrix[μ,v]
-                q[n] += hamiltonian_parameters_dict[str(A)][shell_type]['n0'] - mulliken_population  #This charge is the sum of the charge of each shell on this atom
-        print(q)
-        first_order_energy = 0
+        #Atomic charge by shell
+        for n in range(num_shells): #there is a charge for every atom
+            A = dictionary_atom_types.get(shell_dict[n]["Element"])                      
+            mulliken_population = 0
+            shell_type = str(shell_dict[n]["Shell type"])
+            for μ in range(num_basis_funcs):
+                if basis_functions[μ]['Atom index'] != shell_dict[n]["Index"]:
+                    continue
+                if basis_functions[μ]['Function type'][0] != shell_type:
+                    continue
+                else:
+                    for v in range(num_basis_funcs):
+                        mulliken_population += P_matrix[μ,v] * overlap_matrix[μ,v]
+            q_new[n] += hamiltonian_parameters_dict[str(A)][shell_type]['n0'] - mulliken_population  #This charge is the sum of the charge of each shell on this atom
+       
+        #Charge damping
+        for n in range(num_shells):
+            if abs(q_new[n] - q[n]) > (10**-3):
+                condition_damping = True
+        if condition_damping:
+            for n in range(num_shells):   
+                q_damped[n] = q[n] + 0.4*(q_new[n] - q[n])
+        else:
+            q_damped = q_new
         
+        for i in range(0,len(q_damped),2):
+            q_damped_atom.append(q_damped[i] + q_damped[i+1])
+
+        for A in range(num_shells):
+            shell_shift_a = 0
+            shell_shift_index = str(shell_dict[A]['Index'])
+            shell_shift_type = str(shell_dict[A]['Shell type'])
+            for B in range(num_shells):
+                shell_shift_a += gamma[A,B] * q_damped[B]
+                
+            #initialize of shell shift dictionary
+            if shell_shift_index not in shell_shift:
+                shell_shift[shell_shift_index] = {}
+            #Ensure the inner dictionary
+            if shell_shift_type not in shell_shift[shell_shift_index]:
+                shell_shift[shell_shift_index][shell_shift_type] = {}
+                
+            shell_shift[shell_shift_index][shell_shift_type] = shell_shift_a
+            
+        first_order_energy = 0
+        for μ in range(num_basis_funcs):
+            for v in range(num_basis_funcs):
+                first_order_energy += P_matrix[μ,v] * H0[μ,v]
+                    
         #New Fock matrix calculation
         for μ in range(num_basis_funcs):
             for v in range(num_basis_funcs):
-                shell_shift_a = 0
-                shell_shift_b = 0
-                atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q[basis_functions[μ]['Atom index']]** 2) 
-                atom_shift_b = gamma_dict[str(basis_functions[v]['Atom'])] * (q[basis_functions[v]['Atom index']]** 2)
-                A = basis_functions[μ]['Atom index']
-                B = basis_functions[v]['Atom index']
-                for B in range(num_shells):
-                    shell_shift_a += gamma[A,B] * q[shell_dict[B]['Index']]
-                for A in range(num_shells):
-                    shell_shift_b += gamma[A,B] * q[shell_dict[A]['Index']]
-                fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift_a + shell_shift_b + atom_shift_a + atom_shift_b)
-                first_order_energy += P_matrix[μ,v] * H0[μ,v]
+                atom_shift_a = gamma_dict[str(basis_functions[μ]['Atom'])] * (q_damped_atom[basis_functions[μ]['Atom index']]** 2) 
+                atom_shift_b = gamma_dict[str(basis_functions[v]['Atom'])] * (q_damped_atom[basis_functions[v]['Atom index']]** 2)
+                fock_matrix[μ,v] = H0[μ,v] - 0.5 * overlap_matrix[μ,v] * (shell_shift[str(basis_functions[μ]['Atom index'])][str(basis_functions[μ]['Function type'][0])] + shell_shift[str(basis_functions[v]['Atom index'])][str(basis_functions[v]['Function type'][0])] + atom_shift_a + atom_shift_b)
+                
+                
         print("First order energy is:",first_order_energy,"for iteration:",it)
+        print("Second order energy is:",)
         print("Fock matrix, iteration:",it)
         print(fock_matrix)
         it +=1     
-        error = first_order_energy - previous_energy
-        print(error)
+        error = abs(first_order_energy - previous_energy)
+        #error=0
+        
+        #We store previous charges 
+        q = q_damped
+        print("Error obtained:",error)
         previous_energy = first_order_energy 
             
     return(H0)    
