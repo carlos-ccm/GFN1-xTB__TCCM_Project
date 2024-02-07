@@ -270,11 +270,7 @@ def basis_set_select(all_params):
                 "Element": at,
                 "Shell type":list(basis_functions_dict[str(dictionary_atom_types.get(at))].items())[j][0]}
             n += 1
-            
-    for n in range(num_basis_funcs):
-        print(n)
-        print(basis_functions[n])
-        print("")
+
     return (basis_functions_dict,basis_functions,shell_dict)
 
 def overlap_eval():
@@ -334,11 +330,11 @@ def overlap_eval():
                         overlap_matrix[μ+2,v+2] += d_k * d_l * ((r_p[2] - coordinates_bohr[a,2]) * (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + (1/(2*ζ))*S_kμlv) #z|z
                                                 
                         overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
-                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[a,1])* S_kμlv #y|x
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * (r_p[0] - coordinates_bohr[b,0])* S_kμlv #y|x
                         overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
-                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[a,2])* S_kμlv #z|x
-                        overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
-                        overlap_matrix[μ+2,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[a,1])* S_kμlv #z|y
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * (r_p[0] - coordinates_bohr[b,0])* S_kμlv #z|x
+                        overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #y|z
+                        overlap_matrix[μ+2,v+1] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #z|y
 
                     elif key_ps:
                         overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * S_kμlv
@@ -466,7 +462,6 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
         eigenvalues, C_prime = np.linalg.eig(fock_matrix_prime)
         C = S_inv_sqrt @ C_prime
         sorted_indices = np.argsort (eigenvalues)
-        
         for i in range(len(sorted_indices)):
             C_ordered[i,:] = C[:,sorted_indices[i]]
         
