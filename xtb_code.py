@@ -289,6 +289,7 @@ def overlap_eval():
 
             elif basis_functions[μ]['Function type'][0] == '3' and basis_functions[v]['Function type'][0] != '3':
                 key_ps = True
+                key_p = True
 
             elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] == '3':
                 key_sp = True
@@ -296,6 +297,7 @@ def overlap_eval():
 
             elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] != '3':
                 key_ss = True
+                key_s = True
             
             for i in range(3):
                 dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2                            
@@ -322,21 +324,21 @@ def overlap_eval():
                        overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[2] - coordinates_bohr[b,2]) * S_kμlv
                        
                     elif key_pp:
-                        overlap_matrix[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0])* (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + 1/(2*ζ)*S_kμlv) #x|x
-                        overlap_matrix[μ+1,v+1] += d_k * d_l *  ((r_p[1] - coordinates_bohr[a,1])* (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + 1/(2*ζ)*S_kμlv) #y|y
-                        overlap_matrix[μ+2,v+2] += d_k * d_l *  ((r_p[2] - coordinates_bohr[a,2])* (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + 1/(2*ζ)*S_kμlv) #z|z
+                        overlap_matrix[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0]) * (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + (1/(2*ζ))*S_kμlv) #x|x
+                        overlap_matrix[μ+1,v+1] += d_k * d_l * ((r_p[1] - coordinates_bohr[a,1]) * (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + (1/(2*ζ))*S_kμlv) #y|y
+                        overlap_matrix[μ+2,v+2] += d_k * d_l * ((r_p[2] - coordinates_bohr[a,2]) * (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + (1/(2*ζ))*S_kμlv) #z|z
                                                 
                         overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
-                        overlap_matrix[μ+1,v] = overlap_matrix[μ,v+1] #y|x
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[1] - coordinates_bohr[a,1])* S_kμlv #y|x
                         overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
-                        overlap_matrix[μ+2,v] = overlap_matrix[μ,v+2] #z|x
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[2] - coordinates_bohr[a,2])* S_kμlv #z|x
                         overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
-                        overlap_matrix[μ+2,v+1] = overlap_matrix[μ,v+1] #z|y
+                        overlap_matrix[μ+2,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[1] - coordinates_bohr[a,1])* S_kμlv #z|y
 
                     elif key_ps:
-                        overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] + coordinates_bohr[a,0]) * S_kμlv
-                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] + coordinates_bohr[a,1]) * S_kμlv
-                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] + coordinates_bohr[a,2]) * S_kμlv
+                        overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * S_kμlv
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * S_kμlv
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * S_kμlv
                         
                     elif key_ss:
                         overlap_matrix[μ,v] += d_k * d_l * S_kμlv
@@ -360,7 +362,7 @@ def overlap_eval():
             μ += 1
             key_s = False
         v = 0
-                
+    print("Overlap matrix:\n")       
     print(overlap_matrix)
     return(overlap_matrix)
 
@@ -416,6 +418,7 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
                     H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                   
     print("\n0th Hamiltonian\n")
     print(H0)
+    print("\n")
     kg = 2
     gamma = np.zeros((num_shells,num_shells))
     #now we calculate the coulomb kernel matrix
@@ -441,8 +444,10 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
     threshold = 10**(-7)
     it = 1
     q = [0] * num_shells
+    
     previous_energy = 0 
     while abs(error) > threshold:
+        
         q_damped_atom = []
         q_new_atom = []
         q_new = [0] * num_shells
@@ -544,7 +549,7 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
         
 if __name__ == '__main__': 
     st = time.time()
-    
+    np.set_printoptions(threshold=np.inf)
     #Input control 
     parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
     parser.add_argument('-i', required= True, help='molecule coordinates input')
@@ -574,7 +579,6 @@ if __name__ == '__main__':
            
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
-    
     
     element_list = ['H','C','N','O'] #list of elements present in the system
     number_of_atom_types = len(element_list)
@@ -611,6 +615,6 @@ if __name__ == '__main__':
     
     zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
     SCF(zeroth_hamiltonian_matrix,gamma)
-   
+
     et = time.time()   
     print("Execution time in seconds {:.2f}".format(et-st))  
