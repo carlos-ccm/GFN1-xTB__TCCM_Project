@@ -364,7 +364,7 @@ def overlap_eval():
             key_s = False
         v = 0
     print("Overlap matrix:\n")       
-    print(overlap_matrix)
+    #print(overlap_matrix)
     return(overlap_matrix)
 
 def inverse_square_root_overlap(overlap_matrix):
@@ -379,7 +379,7 @@ def inverse_square_root_overlap(overlap_matrix):
 def scaling_function(μ,v,basis_functions):
     if  (basis_functions[μ]['Atom'] == 'H' and basis_functions[μ]['Function type'][0] == '1' and basis_functions[v]['Atom'] == 'H' and basis_functions[v]['Function type'][0] == '1'):
         scaling_parameter = khh
-    elif (basis_functions[μ]['Atom'] == 'N' and basis_functions[v]['Atom'] == 'H') or (basis_functions[μ]['Atom'] == 'H' and basis_functions[v]['Atom'] == 'N'):
+    elif (basis_functions[μ]['Atom'] == 'N' and basis_functions[v]['Atom'] == 'H' and basis_functions[v]['Function type'][0] == '1') or (basis_functions[μ]['Atom'] == 'H' and basis_functions[μ]['Function type'][0] == '1' and basis_functions[v]['Atom'] == 'N'):
         scaling_parameter = khn
     else:
         scaling_parameter = 1 
@@ -417,9 +417,9 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
                     
                 else:
                     H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                   
-    print("\n0th Hamiltonian\n")
-    print(H0)
-    print("\n")
+    #print("\n0th Hamiltonian\n")
+    #print(H0)
+    #print("\n")
     kg = 2
     gamma = np.zeros((num_shells,num_shells))
     #now we calculate the coulomb kernel matrix
@@ -563,7 +563,7 @@ if __name__ == '__main__':
     #Files reading
     with open(parameters,'r') as file:
        all_params = file.read().split('\n')
-       
+    
     with open(molecule,'r') as file:
         num_atoms = int(file.readline().strip())
         molecule_name = file.readline().strip()
@@ -603,7 +603,7 @@ if __name__ == '__main__':
     
     for i in range(num_atoms):
         print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
-    
+        
     #Simple terms of the energy, repulsion and dispersion
     repulsion_contribution()
     dispersion_contribution()
@@ -612,8 +612,9 @@ if __name__ == '__main__':
     basis_functions_dict, basis_functions, shell_dict = basis_set_select(all_params)
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
-    
+
     zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
+    print("it       eelec         e(1)         e(2)          e(3) ")
     SCF(zeroth_hamiltonian_matrix,gamma)
 
     et = time.time()   
