@@ -11,7 +11,7 @@ def convert_fortran_to_python(num_string):
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
-    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2,gamma_dict = {},{},{},{},{},{},{},{},{},{},{},{}
+    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2,gamma_dict = {},{},{},{},{},{},{},{},{},{},{},{},{}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -61,6 +61,33 @@ def parameters_assigment(all_params):
             ref_coord_num = all_params[i+1].split()
             for key,value in zip(element_list,ref_coord_num):
                 na_nb_dict [key] = value #This dict contains the number of reference coordination numbers
+        elif 'Each row corresponds to a given CN_i^A,' in line:
+            condition = True
+            j = 1
+            while condition == True:
+                
+                key_atom_type_A = all_params[i+j].split()[0]
+                key_atom_type_B = all_params[i+j].split()[1]
+                n_rows = int(na_nb_dict[str(dictionary_atom_types_inverted.get(str(key_atom_type_A)))])
+                n_columns = int(na_nb_dict[str(dictionary_atom_types_inverted.get(str(key_atom_type_B)))])
+                matrix = np.zeros((n_rows,n_columns))
+                
+                for a in range(n_rows):
+                    for b in range(n_columns):
+                        matrix[a,b] = all_params[i+j+a+1].split()[b]
+                        
+                #initialize of the basis functions dictionary
+                if key_atom_type_A not in C6_dict:
+                    C6_dict[key_atom_type_A] = {}
+
+                #Ensure the inner dictionary has the basis_function_type key
+                if key_atom_type_B not in C6_dict[key_atom_type_A]:
+                    C6_dict[key_atom_type_A][key_atom_type_B] = {}    
+                                       
+                C6_dict[key_atom_type_A][key_atom_type_B] = matrix
+                j += n_rows + 1
+                if key_atom_type_A == '4' and key_atom_type_B == '4':
+                    condition = False  
         elif 'KAB term' in line:
             khh = (convert_fortran_to_python((all_params[i+1]).split()[0]))
             khn = (convert_fortran_to_python((all_params[i+1]).split()[1]))
@@ -116,7 +143,7 @@ def parameters_assigment(all_params):
             for key,value in zip(element_list,gamma):
                 gamma_dict [key] = convert_fortran_to_python(value)
                 
-    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict)
+    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -148,17 +175,28 @@ def switcher(n):
     return(value)
 
 def cn(a,b,n,coord_number):
-    
     if n == 6:
         l_ij_acc = 0
+        value = 0
+        print(np.transpose(C6_dict['1']['4'])) #Aqui esta la clave!!!!!!!!!!!!!!!
+        hola
         for atom_a in range(int(na_nb_dict.get(atom_list[a]))):
             for atom_b in range(int(na_nb_dict.get(atom_list[b]))):
                 l_ij = np.exp(-kl * ((coord_number - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) 
-                value = 1
-                l_ij_acc += l_ij
-       
+                if int(dictionary_atom_types[atom_list[a]]) > int(dictionary_atom_types[atom_list[b]]):
+                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[b]])][str(dictionary_atom_types[atom_list[a]])][atom_a,atom_b]
+                    print(c6_ij)
+                    value +=  c6_ij * l_ij
+                    l_ij_acc += l_ij
+                else:
+                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[a]])][str(dictionary_atom_types[atom_list[b]])][atom_a,atom_b]
+                    print(c6_ij)
+                    value +=  c6_ij * l_ij
+                    l_ij_acc += l_ij
+        value = value / l_ij_acc
+        print(value)
     elif n == 8:
-        c6 =   1     
+        c6 =   value     
         value = 3 * c6 * np.sqrt(convert_fortran_to_python(q_dict.get(atom_list[a])) * convert_fortran_to_python(q_dict.get(atom_list[b])))
     
     #This damping constant is just the rAB,0
@@ -198,7 +236,7 @@ def dispersion_contribution():
             for n in [6, 8]:
                 cn_n,damping_constant= cn(a,b,n,coord_number)
                 dispersion_energy += ((-switcher(n) * cn_n)/(dist_ab**n)) * damping_func(dist_ab,n,damping_constant)
-            
+    print(dispersion_energy)   
     return(dispersion_energy)
 ###############################################################################################################
 
@@ -417,9 +455,9 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
                     
                 else:
                     H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                   
-    #print("\n0th Hamiltonian\n")
-    #print(H0)
-    #print("\n")
+    print("\n0th Hamiltonian\n")
+    print(H0)
+    print("\n")
     kg = 2
     gamma = np.zeros((num_shells,num_shells))
     #now we calculate the coulomb kernel matrix
@@ -584,7 +622,9 @@ if __name__ == '__main__':
     number_of_atom_types = len(element_list)
 
     dictionary_atom_types = {'H':1,'C':2,'N':3,'O':4}
+    dictionary_atom_types_inverted = {'1':'H','2':'C','3':'N','4':'O'}
     electrons_per_atom_type = {'H':1,'C':4,'N':5,'O':6}
+    
     basis_functions_per_atom_type = {'H':2,'C':4,'N':4,'O':4} #3 per p type
     
     system_elec = 0
@@ -598,7 +638,7 @@ if __name__ == '__main__':
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_shells,num_basis_funcs)
     
-    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict= parameters_assigment(all_params)
+    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict = parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
