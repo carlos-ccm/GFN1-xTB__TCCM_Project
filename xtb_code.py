@@ -11,7 +11,7 @@ def convert_fortran_to_python(num_string):
 
 ##################################### PARAMETERS FROM FILE #####################################
 def parameters_assigment(all_params):
-    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2,gamma_dict = {},{},{},{},{},{},{},{},{},{},{},{}
+    alpha_dict,zeff_dict,q_dict,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,kll_dict,kcn_dict,hamiltonian_parameters_dict,electronegativities_dict,r_dict_2,gamma_dict = {},{},{},{},{},{},{},{},{},{},{},{},{}
     
     #enumerate gives us the chance of getting the index of each element in the list
     for i, line in enumerate(all_params): 
@@ -61,6 +61,33 @@ def parameters_assigment(all_params):
             ref_coord_num = all_params[i+1].split()
             for key,value in zip(element_list,ref_coord_num):
                 na_nb_dict [key] = value #This dict contains the number of reference coordination numbers
+        elif 'Each row corresponds to a given CN_i^A,' in line:
+            condition = True
+            j = 1
+            while condition == True:
+                
+                key_atom_type_A = all_params[i+j].split()[0]
+                key_atom_type_B = all_params[i+j].split()[1]
+                n_rows = int(na_nb_dict[str(dictionary_atom_types_inverted.get(str(key_atom_type_A)))])
+                n_columns = int(na_nb_dict[str(dictionary_atom_types_inverted.get(str(key_atom_type_B)))])
+                matrix = np.zeros((n_rows,n_columns))
+                
+                for a in range(n_rows):
+                    for b in range(n_columns):
+                        matrix[a,b] = all_params[i+j+a+1].split()[b]
+                        
+                #initialize of the basis functions dictionary
+                if key_atom_type_A not in C6_dict:
+                    C6_dict[key_atom_type_A] = {}
+
+                #Ensure the inner dictionary has the basis_function_type key
+                if key_atom_type_B not in C6_dict[key_atom_type_A]:
+                    C6_dict[key_atom_type_A][key_atom_type_B] = {}    
+                                       
+                C6_dict[key_atom_type_A][key_atom_type_B] = matrix
+                j += n_rows + 1
+                if key_atom_type_A == '4' and key_atom_type_B == '4':
+                    condition = False  
         elif 'KAB term' in line:
             khh = (convert_fortran_to_python((all_params[i+1]).split()[0]))
             khn = (convert_fortran_to_python((all_params[i+1]).split()[1]))
@@ -116,7 +143,7 @@ def parameters_assigment(all_params):
             for key,value in zip(element_list,gamma):
                 gamma_dict [key] = convert_fortran_to_python(value)
                 
-    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict)
+    return(distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict)
 ###############################################################################################################
 
 ##################################### REPULSION TERM #####################################
@@ -137,7 +164,7 @@ def repulsion_contribution():
     print("\n----------------------------------------------------\n| Repulsion energy is:",repulsion_energy,'Hartree |\n----------------------------------------------------\n')
     return(repulsion_energy)
 ###############################################################################################################
-
+ 
 ##################################### DISPERSION TERM #####################################
 
 def switcher(n):
@@ -147,18 +174,27 @@ def switcher(n):
         value = s8
     return(value)
 
-def cn(a,b,n,coord_number):
-    
+def cn(a,b,n,coord_number_list,value):
     if n == 6:
         l_ij_acc = 0
+        value = 0
         for atom_a in range(int(na_nb_dict.get(atom_list[a]))):
             for atom_b in range(int(na_nb_dict.get(atom_list[b]))):
-                l_ij = np.exp(-kl * ((coord_number - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) 
-                value = 1
-                l_ij_acc += l_ij
-       
+                l_ij = np.exp(-kl * ((coord_number_list[a] - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) * np.exp(-kl * ((coord_number_list[b] - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[b])[atom_b]))**2)) 
+                if int(dictionary_atom_types[atom_list[a]]) > int(dictionary_atom_types[atom_list[b]]):
+                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[b]])][str(dictionary_atom_types[atom_list[a]])][atom_b,atom_a]
+                    
+                    value +=  c6_ij * l_ij
+                    l_ij_acc += l_ij
+                else:
+                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[a]])][str(dictionary_atom_types[atom_list[b]])][atom_a,atom_b]
+                    
+                    value +=  c6_ij * l_ij
+                    l_ij_acc += l_ij
+        value = value / l_ij_acc
+        
     elif n == 8:
-        c6 =   1     
+        c6 = value     
         value = 3 * c6 * np.sqrt(convert_fortran_to_python(q_dict.get(atom_list[a])) * convert_fortran_to_python(q_dict.get(atom_list[b])))
     
     #This damping constant is just the rAB,0
@@ -170,24 +206,27 @@ def damping_func(dist_ab,n,damping_constant):
     damp = (dist_ab**n)/((dist_ab**n) + (a1*damping_constant + a2) ** n)
     return(damp)
 
-def coord_calc(a,num_atoms):
-    coord_number = 0
-    for b in range(num_atoms):
-        dist_ab = 0
-        if b != a:
-            for i in range(3):
-                dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
-                
-            dist_ab = np.sqrt(dist_ab)
-            coord_number += (1 + np.exp(-kcn * ((r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) / dist_ab - 1)))** -1 
-    return(coord_number)
+def coord_calc(num_atoms):
+    coord_number_list = []
+    for a in range(num_atoms):
+        coord_number = 0
+        for b in range(num_atoms):
+            dist_ab = 0
+            if b != a:
+                for i in range(3):
+                    dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
+                    
+                dist_ab = np.sqrt(dist_ab)
+                coord_number += (1 + np.exp(-kcn * ((r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) / dist_ab - 1)))** -1 
+        coord_number_list.append(coord_number)
+    return(coord_number_list)
 
 def dispersion_contribution():
-    
+    coord_number_list = coord_calc(num_atoms)
     #Initialization of the dispersion energy term
     dispersion_energy = 0
     for a in range(num_atoms):
-        coord_number = coord_calc(a,num_atoms)
+        value = 0
         
         for b in range (a+1, num_atoms):
             dist_ab = 0
@@ -196,9 +235,12 @@ def dispersion_contribution():
 
             dist_ab = np.sqrt(dist_ab)
             for n in [6, 8]:
-                cn_n,damping_constant= cn(a,b,n,coord_number)
+                cn_n,damping_constant= cn(a,b,n,coord_number_list,value)
+                value = cn_n
                 dispersion_energy += ((-switcher(n) * cn_n)/(dist_ab**n)) * damping_func(dist_ab,n,damping_constant)
-            
+                
+    print("\n----------------------------------------------------\n| Dispersion energy is:",dispersion_energy,'Hartree |\n----------------------------------------------------\n')
+
     return(dispersion_energy)
 ###############################################################################################################
 
@@ -270,6 +312,7 @@ def basis_set_select(all_params):
                 "Element": at,
                 "Shell type":list(basis_functions_dict[str(dictionary_atom_types.get(at))].items())[j][0]}
             n += 1
+
     return (basis_functions_dict,basis_functions,shell_dict)
 
 def overlap_eval():
@@ -289,6 +332,7 @@ def overlap_eval():
 
             elif basis_functions[μ]['Function type'][0] == '3' and basis_functions[v]['Function type'][0] != '3':
                 key_ps = True
+                key_p = True
 
             elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] == '3':
                 key_sp = True
@@ -296,6 +340,7 @@ def overlap_eval():
 
             elif basis_functions[μ]['Function type'][0] != '3' and basis_functions[v]['Function type'][0] != '3':
                 key_ss = True
+                key_s = True
             
             for i in range(3):
                 dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2                            
@@ -322,21 +367,21 @@ def overlap_eval():
                        overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[2] - coordinates_bohr[b,2]) * S_kμlv
                        
                     elif key_pp:
-                        overlap_matrix[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0])* (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + 1/(2*ζ)*S_kμlv) #x|x
-                        overlap_matrix[μ+1,v+1] += d_k * d_l *  ((r_p[1] - coordinates_bohr[a,1])* (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + 1/(2*ζ)*S_kμlv) #y|y
-                        overlap_matrix[μ+2,v+2] += d_k * d_l *  ((r_p[2] - coordinates_bohr[a,2])* (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + 1/(2*ζ)*S_kμlv) #z|z
+                        overlap_matrix[μ,v] += d_k * d_l *  ((r_p[0] - coordinates_bohr[a,0]) * (r_p[0] - coordinates_bohr[b,0]) * S_kμlv + (1/(2*ζ))*S_kμlv) #x|x
+                        overlap_matrix[μ+1,v+1] += d_k * d_l * ((r_p[1] - coordinates_bohr[a,1]) * (r_p[1] - coordinates_bohr[b,1]) * S_kμlv + (1/(2*ζ))*S_kμlv) #y|y
+                        overlap_matrix[μ+2,v+2] += d_k * d_l * ((r_p[2] - coordinates_bohr[a,2]) * (r_p[2] - coordinates_bohr[b,2]) * S_kμlv + (1/(2*ζ))*S_kμlv) #z|z
                                                 
-                        overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
-                        overlap_matrix[μ+1,v] = overlap_matrix[μ,v+1] #y|x
-                        overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
-                        overlap_matrix[μ+2,v] = overlap_matrix[μ,v+2] #z|x
-                        overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[b,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #y|z
-                        overlap_matrix[μ+2,v+1] = overlap_matrix[μ,v+1] #z|y
+                        overlap_matrix[μ,v+1] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #x|y
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * (r_p[0] - coordinates_bohr[b,0])* S_kμlv #y|x
+                        overlap_matrix[μ,v+2] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #x|z
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * (r_p[0] - coordinates_bohr[b,0])* S_kμlv #z|x
+                        overlap_matrix[μ+1,v+2] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * (r_p[2] - coordinates_bohr[b,2])* S_kμlv #y|z
+                        overlap_matrix[μ+2,v+1] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * (r_p[1] - coordinates_bohr[b,1])* S_kμlv #z|y
 
                     elif key_ps:
-                        overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] + coordinates_bohr[a,0]) * S_kμlv
-                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] + coordinates_bohr[a,1]) * S_kμlv
-                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] + coordinates_bohr[a,2]) * S_kμlv
+                        overlap_matrix[μ,v] += d_k * d_l *  (r_p[0] - coordinates_bohr[a,0]) * S_kμlv
+                        overlap_matrix[μ+1,v] += d_k * d_l *  (r_p[1] - coordinates_bohr[a,1]) * S_kμlv
+                        overlap_matrix[μ+2,v] += d_k * d_l *  (r_p[2] - coordinates_bohr[a,2]) * S_kμlv
                         
                     elif key_ss:
                         overlap_matrix[μ,v] += d_k * d_l * S_kμlv
@@ -360,8 +405,8 @@ def overlap_eval():
             μ += 1
             key_s = False
         v = 0
-                
-    print(overlap_matrix)
+    print("Overlap matrix:\n")       
+    #print(overlap_matrix)
     return(overlap_matrix)
 
 def inverse_square_root_overlap(overlap_matrix):
@@ -376,7 +421,7 @@ def inverse_square_root_overlap(overlap_matrix):
 def scaling_function(μ,v,basis_functions):
     if  (basis_functions[μ]['Atom'] == 'H' and basis_functions[μ]['Function type'][0] == '1' and basis_functions[v]['Atom'] == 'H' and basis_functions[v]['Function type'][0] == '1'):
         scaling_parameter = khh
-    elif (basis_functions[μ]['Atom'] == 'N' and basis_functions[v]['Atom'] == 'H') or (basis_functions[μ]['Atom'] == 'H' and basis_functions[v]['Atom'] == 'N'):
+    elif (basis_functions[μ]['Atom'] == 'N' and basis_functions[v]['Atom'] == 'H' and basis_functions[v]['Function type'][0] == '1') or (basis_functions[μ]['Atom'] == 'H' and basis_functions[μ]['Function type'][0] == '1' and basis_functions[v]['Atom'] == 'N'):
         scaling_parameter = khn
     else:
         scaling_parameter = 1 
@@ -390,10 +435,10 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
     for μ in range(num_basis_funcs):
         for v in range(num_basis_funcs):
             
-            h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
-            h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * coord_calc(basis_functions[v]['Atom index'], num_atoms)) #effective atomic energy level h_l_b
+            h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[μ]['Atom index']]) #effective atomic energy level h_l_a 
+            h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[v]['Atom index']]) #effective atomic energy level h_l_b
             if μ == v:
-                H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
+                H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[μ]['Atom index']]) #effective atomic energy level h_l_a 
             else:
                 scaling_parameter = scaling_function(μ,v,basis_functions)
                 dist_ab = 0
@@ -416,6 +461,7 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
                     H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                   
     print("\n0th Hamiltonian\n")
     print(H0)
+    print("\n")
     kg = 2
     gamma = np.zeros((num_shells,num_shells))
     #now we calculate the coulomb kernel matrix
@@ -441,8 +487,10 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
     threshold = 10**(-7)
     it = 1
     q = [0] * num_shells
+    
     previous_energy = 0 
     while abs(error) > threshold:
+        
         q_damped_atom = []
         q_new_atom = []
         q_new = [0] * num_shells
@@ -456,7 +504,6 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
         eigenvalues, C_prime = np.linalg.eig(fock_matrix_prime)
         C = S_inv_sqrt @ C_prime
         sorted_indices = np.argsort (eigenvalues)
-        
         for i in range(len(sorted_indices)):
             C_ordered[i,:] = C[:,sorted_indices[i]]
         
@@ -544,7 +591,7 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
         
 if __name__ == '__main__': 
     st = time.time()
-    
+    np.set_printoptions(threshold=np.inf)
     #Input control 
     parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
     parser.add_argument('-i', required= True, help='molecule coordinates input')
@@ -558,7 +605,7 @@ if __name__ == '__main__':
     #Files reading
     with open(parameters,'r') as file:
        all_params = file.read().split('\n')
-       
+    
     with open(molecule,'r') as file:
         num_atoms = int(file.readline().strip())
         molecule_name = file.readline().strip()
@@ -575,12 +622,13 @@ if __name__ == '__main__':
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
     
-    
     element_list = ['H','C','N','O'] #list of elements present in the system
     number_of_atom_types = len(element_list)
 
     dictionary_atom_types = {'H':1,'C':2,'N':3,'O':4}
+    dictionary_atom_types_inverted = {'1':'H','2':'C','3':'N','4':'O'}
     electrons_per_atom_type = {'H':1,'C':4,'N':5,'O':6}
+    
     basis_functions_per_atom_type = {'H':2,'C':4,'N':4,'O':4} #3 per p type
     
     system_elec = 0
@@ -594,12 +642,12 @@ if __name__ == '__main__':
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_shells,num_basis_funcs)
     
-    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict= parameters_assigment(all_params)
+    distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict = parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
         print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
-    
+        
     #Simple terms of the energy, repulsion and dispersion
     repulsion_contribution()
     dispersion_contribution()
@@ -608,9 +656,10 @@ if __name__ == '__main__':
     basis_functions_dict, basis_functions, shell_dict = basis_set_select(all_params)
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
-    
+
     zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
+    print("it       eelec         e(1)         e(2)          e(3) ")
     SCF(zeroth_hamiltonian_matrix,gamma)
-   
+
     et = time.time()   
     print("Execution time in seconds {:.2f}".format(et-st))  
