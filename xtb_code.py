@@ -174,29 +174,27 @@ def switcher(n):
         value = s8
     return(value)
 
-def cn(a,b,n,coord_number):
+def cn(a,b,n,coord_number_list,value):
     if n == 6:
         l_ij_acc = 0
         value = 0
-        print(np.transpose(C6_dict['1']['4'])) #Aqui esta la clave!!!!!!!!!!!!!!!
-        hola
         for atom_a in range(int(na_nb_dict.get(atom_list[a]))):
             for atom_b in range(int(na_nb_dict.get(atom_list[b]))):
-                l_ij = np.exp(-kl * ((coord_number - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) 
+                l_ij = np.exp(-kl * ((coord_number_list[a] - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[a])[atom_a]))**2)) * np.exp(-kl * ((coord_number_list[b] - convert_fortran_to_python(ref_coord_num_dict.get(atom_list[b])[atom_b]))**2)) 
                 if int(dictionary_atom_types[atom_list[a]]) > int(dictionary_atom_types[atom_list[b]]):
-                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[b]])][str(dictionary_atom_types[atom_list[a]])][atom_a,atom_b]
-                    print(c6_ij)
+                    c6_ij = C6_dict[str(dictionary_atom_types[atom_list[b]])][str(dictionary_atom_types[atom_list[a]])][atom_b,atom_a]
+                    
                     value +=  c6_ij * l_ij
                     l_ij_acc += l_ij
                 else:
                     c6_ij = C6_dict[str(dictionary_atom_types[atom_list[a]])][str(dictionary_atom_types[atom_list[b]])][atom_a,atom_b]
-                    print(c6_ij)
+                    
                     value +=  c6_ij * l_ij
                     l_ij_acc += l_ij
         value = value / l_ij_acc
-        print(value)
+        
     elif n == 8:
-        c6 =   value     
+        c6 = value     
         value = 3 * c6 * np.sqrt(convert_fortran_to_python(q_dict.get(atom_list[a])) * convert_fortran_to_python(q_dict.get(atom_list[b])))
     
     #This damping constant is just the rAB,0
@@ -208,24 +206,27 @@ def damping_func(dist_ab,n,damping_constant):
     damp = (dist_ab**n)/((dist_ab**n) + (a1*damping_constant + a2) ** n)
     return(damp)
 
-def coord_calc(a,num_atoms):
-    coord_number = 0
-    for b in range(num_atoms):
-        dist_ab = 0
-        if b != a:
-            for i in range(3):
-                dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
-                
-            dist_ab = np.sqrt(dist_ab)
-            coord_number += (1 + np.exp(-kcn * ((r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) / dist_ab - 1)))** -1 
-    return(coord_number)
+def coord_calc(num_atoms):
+    coord_number_list = []
+    for a in range(num_atoms):
+        coord_number = 0
+        for b in range(num_atoms):
+            dist_ab = 0
+            if b != a:
+                for i in range(3):
+                    dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
+                    
+                dist_ab = np.sqrt(dist_ab)
+                coord_number += (1 + np.exp(-kcn * ((r_dict.get(atom_list[a]) + r_dict.get(atom_list[b])) / dist_ab - 1)))** -1 
+        coord_number_list.append(coord_number)
+    return(coord_number_list)
 
 def dispersion_contribution():
-    
+    coord_number_list = coord_calc(num_atoms)
     #Initialization of the dispersion energy term
     dispersion_energy = 0
     for a in range(num_atoms):
-        coord_number = coord_calc(a,num_atoms)
+        value = 0
         
         for b in range (a+1, num_atoms):
             dist_ab = 0
@@ -234,9 +235,12 @@ def dispersion_contribution():
 
             dist_ab = np.sqrt(dist_ab)
             for n in [6, 8]:
-                cn_n,damping_constant= cn(a,b,n,coord_number)
+                cn_n,damping_constant= cn(a,b,n,coord_number_list,value)
+                value = cn_n
                 dispersion_energy += ((-switcher(n) * cn_n)/(dist_ab**n)) * damping_func(dist_ab,n,damping_constant)
-    print(dispersion_energy)   
+                
+    print("\n----------------------------------------------------\n| Dispersion energy is:",dispersion_energy,'Hartree |\n----------------------------------------------------\n')
+
     return(dispersion_energy)
 ###############################################################################################################
 
@@ -431,10 +435,10 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
     for μ in range(num_basis_funcs):
         for v in range(num_basis_funcs):
             
-            h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
-            h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * coord_calc(basis_functions[v]['Atom index'], num_atoms)) #effective atomic energy level h_l_b
+            h_l_a = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[μ]['Atom index']]) #effective atomic energy level h_l_a 
+            h_l_b = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[v]['Atom']))][basis_functions[v]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[v]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[v]['Atom index']]) #effective atomic energy level h_l_b
             if μ == v:
-                H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * coord_calc(basis_functions[μ]['Atom index'], num_atoms)) #effective atomic energy level h_l_a 
+                H0[μ,v] = hamiltonian_parameters_dict[str(dictionary_atom_types.get(basis_functions[μ]['Atom']))][basis_functions[μ]['Function type'][0]]['HAl'] * (1 + kcn_dict[basis_functions[μ]['Function type'][0]] * (coord_calc(num_atoms))[basis_functions[μ]['Atom index']]) #effective atomic energy level h_l_a 
             else:
                 scaling_parameter = scaling_function(μ,v,basis_functions)
                 dist_ab = 0
