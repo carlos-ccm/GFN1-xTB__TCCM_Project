@@ -5,7 +5,7 @@ Development of a coding project for the TCCM Master. The project consist of crea
 Method based on the theory developed in “Extended tight-binding quantum chemistry methods”, C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht, J. Seibert,S. Spicher and S. Grimme, WIREs Comput. Mol. Sci. 2021, 11 e1493, DOI: https://doi.org/10.1002/wcms.1493.
 
 
-**[Carlos Cruz Marin](mailto:carloscruzmarin.bdn@gmail.com)**  
+Author: **[Carlos Cruz Marin](mailto:carloscruzmarin.bdn@gmail.com)**  
 Twitter: [@c_cruz_TC](https://twitter.com/c_cruz_TC)
 
 
@@ -52,8 +52,7 @@ The code includes the following flags
 -  A general overview of the GFNn-xTB methods (n = 0, 1, 2): “Extended tight-binding quantum
 chemistry methods”, C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht, J. Seibert,
 S. Spicher and S. Grimme, WIREs Comput. Mol. Sci. 2021, 11 e1493, DOI: https://doi.org/10.1002/wcms.1493.
--  What I refer to above as the ‘original paper’, which contains a systematic description of the
-GFN1-xTB method and its performance: “A Robust and Accurate Tight-Binding Quantum
+-  Systematic description of the GFN1-xTB method and its performance: “A Robust and Accurate Tight-Binding Quantum
 Chemical Method for Structures, Vibrational Frequencies, and Noncovalent Interactions of Large
 Molecular Systems Parametrized for All spd-Block Elements (Z = 1 – 86)”, S. Grimme, C.
 Bannwarth and P. Shushkov, J. Chem. Theory Comput. 2017, 13, 1989 – 2009, https://doi.org/10.1021/acs.jctc.7b00118.
