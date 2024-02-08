@@ -1,6 +1,7 @@
 # Semiempirical GFN1-xTB Method code
 
-Development of a coding project for the TCCM Master. The project consist of creating from scratch a code that performs semiempirical DFT calculations for a given molecule. 
+Development of a coding project for the TCCM Master. The project consist of creating from scratch a code that performs semiempirical DFT calculations for a given molecule, composed by H, C, N and O. 
+
 Author: Carlos Cruz Marin
 
 Mail: carloscruzmarin.bdn@gmail.com
