@@ -1,6 +1,6 @@
 # Parameters and settings needed for GFN1-xTB coding exercise, for H, C, N and O atoms. 
 # More extended parameter sets are available from the Grimme group.
-# Comments preceded by a # are included to improve readability.
+# Comments preceded by a # are included to improve readability
 # 
 # Global settings and parameters
 # Conversion factor from bohr to Angstrom: 1 bohr = 0.5291772109 Angstrom

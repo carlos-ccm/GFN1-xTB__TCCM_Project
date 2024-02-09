@@ -160,8 +160,7 @@ def repulsion_contribution():
                 
             dist_ab = np.sqrt(dist_ab)   
             repulsion_energy += (convert_fortran_to_python(zeff_dict.get(atom_list[a])) * convert_fortran_to_python( zeff_dict.get(atom_list[b])))/(dist_ab) * np.exp(-np.sqrt(convert_fortran_to_python(alpha_dict.get(atom_list[a]))*convert_fortran_to_python(alpha_dict.get(atom_list[b]))) * dist_ab ** kf) 
-    
-    print("\n----------------------------------------------------\n| Repulsion energy is:",repulsion_energy,'Hartree |\n----------------------------------------------------\n')
+
     return(repulsion_energy)
 ###############################################################################################################
  
@@ -238,9 +237,6 @@ def dispersion_contribution():
                 cn_n,damping_constant= cn(a,b,n,coord_number_list,value)
                 value = cn_n
                 dispersion_energy += ((-switcher(n) * cn_n)/(dist_ab**n)) * damping_func(dist_ab,n,damping_constant)
-                
-    print("\n----------------------------------------------------\n| Dispersion energy is:",dispersion_energy,'Hartree |\n----------------------------------------------------\n')
-
     return(dispersion_energy)
 ###############################################################################################################
 
@@ -405,8 +401,9 @@ def overlap_eval():
             μ += 1
             key_s = False
         v = 0
-    print("Overlap matrix:\n")       
-    #print(overlap_matrix)
+    print("\n ================== Overlap matrix (S) of the system ==================\n")       
+    print(overlap_matrix)
+    print("-----------------------------------------------------------------------------")
     return(overlap_matrix)
 
 def inverse_square_root_overlap(overlap_matrix):
@@ -459,9 +456,9 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
                     
                 else:
                     H0[μ,v]  = scaling_parameter * kll_dict[str(basis_functions[v]['Function type'][0])][str(basis_functions[μ]['Function type'][0])] * 0.5 * (h_l_a + h_l_b) * overlap_matrix[μ,v] * variation_electronegativity_term * pi_rab_ll                   
-    print("\n0th Hamiltonian\n")
+    print("\n ================== 0th Hamiltonian of the system ==================\n")
     print(H0)
-    print("\n")
+    print("-----------------------------------------------------------------------------\n")
     kg = 2
     gamma = np.zeros((num_shells,num_shells))
     #now we calculate the coulomb kernel matrix
@@ -586,12 +583,39 @@ def SCF(zeroth_hamiltonian_matrix,gamma):
         previous_energy = total_electronic_energy 
         
         #print("Error obtained:",error)
+    print("\n           SCF converged succesfully!!\n")
+    print("Final atomic charges")
+    print("----------------------")
+    print(q_damped_atom)
+    print("\nOrbital energies and molecular orbitals coefficients:")
+    print("-------------------------------------------------------")
+    for i in range(num_basis_funcs):
+        print("\nMolecular orbital",i+1,"Energy:",eigenvalues[sorted_indices][i],"hartree")
+        print(C_ordered[i,:])
             
-    return    
+    return(total_electronic_energy)
         
 if __name__ == '__main__': 
     st = time.time()
     np.set_printoptions(threshold=np.inf)
+    
+    print("""   
+****************************************************************************
+          
+.d8888b.  8888888888 888b    888  d888             88888888888 888888b.   
+d88P  Y88b 888        8888b   888 d8888                 888     888  "88b  
+888    888 888        88888b  888   888                 888     888  .88P  
+888        8888888    888Y88b 888   888        888  888 888     8888888K.  
+888  88888 888        888 Y88b888   888        `Y8bd8P' 888     888  "Y88b 
+888    888 888        888  Y88888   888  888888  X88K   888     888    888 
+Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P 
+ "Y8888P88 888        888    Y888 8888888      888  888 888     8888888P" 
+ 
+ *************************************************************************** 
+            *       Author: Carlos Cruz Marin           *
+            *   Contact: carloscruzmarin.bdn@gmail.com  *
+            *********************************************
+          """)
     #Input control 
     parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
     parser.add_argument('-i', required= True, help='molecule coordinates input')
@@ -618,7 +642,8 @@ if __name__ == '__main__':
            #After the first two lines, the atom's coordinates in Angstroms
            for i in range(3):
                coordinates[n][i] = data.split()[i+1]
-           
+    print("\n                   Information about the system below")  
+    print("-----------------------------------------------------------------------------")
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
     
@@ -641,16 +666,20 @@ if __name__ == '__main__':
     num_shells = num_atoms * 2  
     print('Number of electrons and occupied orbitals:',system_elec,int(system_elec/2))
     print('Total number of shells and basis functions:',num_shells,num_basis_funcs)
+    print("\nSystem's atom and coordinates:")
     
     distance_conversion,energy_conversion,kf,alpha_dict,zeff_dict,q_dict,a1,a2,s6,s8,kcn,kl,r_dict,ref_coord_num_dict,C6_dict,na_nb_dict,khh,khn,kll_dict,kcn_dict,hamiltonian_parameters_dict,kEN,electronegativities_dict,r_dict_2,gamma_dict = parameters_assigment(all_params)
     coordinates_bohr = coordinates * 1 / distance_conversion
     
     for i in range(num_atoms):
-        print("Atom of the system:",atom_list[i],"with coordinates:",coordinates_bohr[i,:],'in bohrs')
-        
+        print("Atom of the system:",atom_list[i],"Coordinates:",coordinates_bohr[i,:],'in bohrs')
+    print("-----------------------------------------------------------------------------\n")
+
     #Simple terms of the energy, repulsion and dispersion
-    repulsion_contribution()
-    dispersion_contribution()
+    repulsion_energy = repulsion_contribution()
+    dispersion_energy = dispersion_contribution()
+
+    print("Generating the matrices needed for the calculation ...")
     
     #Now we calculate the components of the electronic energy
     basis_functions_dict, basis_functions, shell_dict = basis_set_select(all_params)
@@ -658,8 +687,17 @@ if __name__ == '__main__':
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
 
     zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
+    print("Information of the SCF cycle ...")
     print("it       eelec         e(1)         e(2)          e(3) ")
-    SCF(zeroth_hamiltonian_matrix,gamma)
-
+    total_electronic_energy = SCF(zeroth_hamiltonian_matrix,gamma)
+   
+    print("\n              Information about the energy terms below")  
+    print("-----------------------------------------------------------------------------")
+    print("         Repulsion energy:",repulsion_energy,"hartree")
+    print("         Dispersion energy:",dispersion_energy,"hartree")
+    print("         Electronic energy:",total_electronic_energy,"hartree")
+    print("-----------------------------------------------------------------------------")
+    
+    
     et = time.time()   
-    print("Execution time in seconds {:.2f}".format(et-st))  
+    print("\nExecution time: {:.2f}s".format(et-st))  
