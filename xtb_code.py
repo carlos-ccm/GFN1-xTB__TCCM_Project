@@ -1,11 +1,40 @@
 #!/usr/bin/env python3
 
+# ----------------------------------------------------------
+# GFN1-xTB code for the TCCM master Remote Project subject
+# supervised by Pr. Jeremy Harvey
+#
+# File: xtb_codes.py
+#
+# Created on 10/02/2024 by Carlos Cruz Marin
+# ----------------------------------------------------------
+#
+# Calculation of the energy of a system (which contains elements
+# like H, C, N and O), following the GFN1-xTB theory.
+# You can read more information about this in the following 
+# GitHub repository:
+# 
+# https://github.com/carlos-ccm/GFN1-xTB__TCCM_Project
+#
+# Example of the command line for running test molecule's
+# calculation:
+#
+# python xtb_code.py -i test/molecule.xyz -p parameters.dat
+#
+# ----------------------------------------------------------
+# ----------------------------------------------------------
+
+
 import numpy as np
 import argparse
 import time
 
 ##################################### TOOLS #####################################
 def convert_fortran_to_python(num_string):
+    '''
+    As many parameters in the file are with this notation used in fortran (or other languages) wiht the d
+    we set a function for making them usable as numbers in general
+    '''
     return float(num_string.replace('d','e'))
 ###############################################################################################################
 
@@ -149,7 +178,9 @@ def parameters_assigment(all_params):
 ##################################### REPULSION TERM #####################################
 
 def repulsion_contribution():
-    
+    '''
+    Eq.9 - For this equation we need nothing but the global variables defined in the main program
+    '''
     #Initialization of the repulsion energy term
     repulsion_energy = 0
     for a in range(num_atoms):
@@ -158,8 +189,8 @@ def repulsion_contribution():
             for i in range(3):
                 dist_ab += (coordinates_bohr[a,i]-coordinates_bohr[b,i])**2
                 
-            dist_ab = np.sqrt(dist_ab)   
-            repulsion_energy += (convert_fortran_to_python(zeff_dict.get(atom_list[a])) * convert_fortran_to_python( zeff_dict.get(atom_list[b])))/(dist_ab) * np.exp(-np.sqrt(convert_fortran_to_python(alpha_dict.get(atom_list[a]))*convert_fortran_to_python(alpha_dict.get(atom_list[b]))) * dist_ab ** kf) 
+            dist_ab = np.sqrt(dist_ab)
+            repulsion_energy += (convert_fortran_to_python(zeff_dict.get(atom_list[a])) * convert_fortran_to_python(zeff_dict.get(atom_list[b])))/(dist_ab) * np.exp(-np.sqrt(convert_fortran_to_python(alpha_dict.get(atom_list[a]))*convert_fortran_to_python(alpha_dict.get(atom_list[b]))) * dist_ab ** kf) 
 
     return(repulsion_energy)
 ###############################################################################################################
@@ -211,7 +242,7 @@ def coord_calc(num_atoms):
         coord_number = 0
         for b in range(num_atoms):
             dist_ab = 0
-            if b != a:
+            if b != a: #We dont want to include the case of A = B
                 for i in range(3):
                     dist_ab += (coordinates_bohr[a,i] - coordinates_bohr[b,i])**2
                     
@@ -221,6 +252,15 @@ def coord_calc(num_atoms):
     return(coord_number_list)
 
 def dispersion_contribution():
+    '''
+    Eq.10- For the dispersion energy we created some functions for making it more readable (functions are above this one)
+    > coord_calc: this function returns a list with the coordination number of each atom (Eq.14)
+    > cn: this function calculates both the C6 and the C8 coefficients, using the A and B atom and the coordination number list. Also
+        it uses the variable value as 3rd party storage to the C6 number that is later used for calculating C8 (Eq.11). It also 
+        calculates the daming constant rAB_0 (Eq.13)
+    > switcher: for making the code cleaner. It return the s6 or s8 value.
+    > damping_func: it just calculates the damping function (Eq.12)
+    '''
     coord_number_list = coord_calc(num_atoms)
     #Initialization of the dispersion energy term
     dispersion_energy = 0
@@ -240,8 +280,13 @@ def dispersion_contribution():
     return(dispersion_energy)
 ###############################################################################################################
 
+################################## BASIS FUNCTIONS #####################################
 def basis_set_select(all_params):
-    
+    '''
+    In this function we read and store the information first of the basis functions that we are using and then we 
+    store them and assign each basis function. 
+    Also we will generate shell_dict variable, containing all the shells of the system.
+    '''
     match = False
     basis_functions_dict = {}
     #This part is for extracting specifically the part of parameters.dat that contains the information about the basis set
@@ -310,8 +355,17 @@ def basis_set_select(all_params):
             n += 1
 
     return (basis_functions_dict,basis_functions,shell_dict)
+###############################################################################################################
+
+################################## OVERLAP MATRIX #####################################
 
 def overlap_eval():
+    '''
+    In this function we calculate overlap matrix. We use same notation as the one used in the PDF file so 
+    μ and v stand for the indexes of the basis functions used each turn.
+    Now for controlling the workflow, we used a set of keys for specifying a case for each type of combination
+    of orbitals you had in each case, for making it the most efficient way without considering any kind of 
+    symmetry in the matrix.'''
     overlap_matrix = np.zeros((num_basis_funcs, num_basis_funcs))
     key_pp, key_sp, key_ss, key_ps, key_p,key_s = False,False,False,False,False,False
     μ = 0
@@ -414,7 +468,9 @@ def inverse_square_root_overlap(overlap_matrix):
     Λ_inv_sqrt = np.diag(1 / np.sqrt(eigenvalues))
     S_inv_sqrt = L @ Λ_inv_sqrt @ L_inv
     return(S_inv_sqrt)
+###############################################################################################################
 
+################################## 0th HAMILTONIAN MATRIX #####################################
 def scaling_function(μ,v,basis_functions):
     if  (basis_functions[μ]['Atom'] == 'H' and basis_functions[μ]['Function type'][0] == '1' and basis_functions[v]['Atom'] == 'H' and basis_functions[v]['Function type'][0] == '1'):
         scaling_parameter = khh
@@ -425,9 +481,13 @@ def scaling_function(μ,v,basis_functions):
            
     return (scaling_parameter)
         
-def zeroth_order_hamiltonian(basis_functions,shell_dict):
-    ##Calculation of the electronic term is shown below ##    
-    #First the mu|H0|nu term, from the 0th order Hamiltonian
+def zeroth_order_hamiltonian(basis_functions,shell_dict):   
+    '''
+    First the mu|H0|nu term, from the 0th order Hamiltonian following Eq.24. This term depends both on the basis functions and in the shell_dict variable
+    which contained all the information about the shells.
+    It uses another function:
+    > scaling_function which will return K_AB_ll' (First term of Eq.24)
+    '''
     H0 = np.zeros((num_basis_funcs,num_basis_funcs))
     for μ in range(num_basis_funcs):
         for v in range(num_basis_funcs):
@@ -460,8 +520,9 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
     print(H0)
     print("-----------------------------------------------------------------------------\n")
     kg = 2
+    
+    #Here we compute the gamma matrix
     gamma = np.zeros((num_shells,num_shells))
-    #now we calculate the coulomb kernel matrix
     for A in range(num_shells):
        for B in range(num_shells): 
             dist_ab = 0
@@ -474,9 +535,15 @@ def zeroth_order_hamiltonian(basis_functions,shell_dict):
             η_AB = 1 / (0.5 * (1/η_A + 1/η_B))
             gamma[A,B] = (1 / ((dist_ab)**kg + (η_AB)**(-kg))) ** (1/kg)
     return(H0,gamma)
+###############################################################################################################
 
+################################## Self-Consistent Field (SCF cycle) #####################################
 def SCF(zeroth_hamiltonian_matrix,gamma):
-    
+    '''
+    Function for computing the SCF cycle. Some important variables:
+    > q = this variable has the initial charge we are using = 0
+    > q_new will store the new values obtained from the system
+    > q_damped is the output of the damping process of the charges'''
     #now we start the SCF process
     fock_matrix = zeroth_hamiltonian_matrix
     new_fock_matrix = np.zeros((num_basis_funcs,num_basis_funcs))
@@ -616,7 +683,7 @@ Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P
             *   Contact: carloscruzmarin.bdn@gmail.com  *
             *********************************************
           """)
-    #Input control 
+    #Input control: here we control the command line for execution 
     parser = argparse.ArgumentParser(description = 'xTB semiempirical DFT method for small molecules')
     parser.add_argument('-i', required= True, help='molecule coordinates input')
     parser.add_argument('-p', required=True, help='parameters of the elements')
@@ -626,10 +693,10 @@ Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P
     parameters = args.p
     atom_list = []
 
-    #Files reading
+    #We open the parameters.dat file for loading all the lines in the all_params variable. Splitted line by line
     with open(parameters,'r') as file:
        all_params = file.read().split('\n')
-    
+    #System's information extraction
     with open(molecule,'r') as file:
         num_atoms = int(file.readline().strip())
         molecule_name = file.readline().strip()
@@ -647,13 +714,12 @@ Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P
     print("Number of atoms in the system:",num_atoms)
     print('Molecule of study:',molecule_name)
     
-    element_list = ['H','C','N','O'] #list of elements present in the system
+    #These 4 elements are needed to be loaded manually, as we will work only with this type of elements
+    element_list = ['H','C','N','O'] 
     number_of_atom_types = len(element_list)
-
     dictionary_atom_types = {'H':1,'C':2,'N':3,'O':4}
     dictionary_atom_types_inverted = {'1':'H','2':'C','3':'N','4':'O'}
     electrons_per_atom_type = {'H':1,'C':4,'N':5,'O':6}
-    
     basis_functions_per_atom_type = {'H':2,'C':4,'N':4,'O':4} #3 per p type
     
     system_elec = 0
@@ -675,7 +741,7 @@ Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P
         print("Atom of the system:",atom_list[i],"Coordinates:",coordinates_bohr[i,:],'in bohrs')
     print("-----------------------------------------------------------------------------\n")
 
-    #Simple terms of the energy, repulsion and dispersion
+    #First functions for calculating the energy terms, Repulsion and Dispersion
     repulsion_energy = repulsion_contribution()
     dispersion_energy = dispersion_contribution()
 
@@ -685,10 +751,11 @@ Y88b  d88P 888        888   Y8888   888        .d8""8b. 888     888   d88P
     basis_functions_dict, basis_functions, shell_dict = basis_set_select(all_params)
     overlap_matrix = overlap_eval()
     S_inv_sqrt = inverse_square_root_overlap(overlap_matrix)
-
     zeroth_hamiltonian_matrix,gamma = zeroth_order_hamiltonian(basis_functions,shell_dict)
+    
     print("Information of the SCF cycle ...")
     print("it       eelec         e(1)         e(2)          e(3) ")
+    #SCF function, which will return the total electronic energy
     total_electronic_energy = SCF(zeroth_hamiltonian_matrix,gamma)
    
     print("\n              Information about the energy terms below")  
